@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.turbo/
+*.tsbuildinfo
+.env*
+!.env.example
+.DS_Store
+playwright-report/
+test-results/
+# Real customer sales exports must never be committed
+*.xlsx
+*.xls
+!fixtures/**/*.xlsx
