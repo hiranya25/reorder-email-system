@@ -1,0 +1,12 @@
+{
+  "name": "reorder-email-system",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "pnpm --filter @reorder/console dev",
+    "build": "pnpm --filter @reorder/console build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  }
+}
