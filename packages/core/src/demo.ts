@@ -1,4 +1,6 @@
+import type { Product } from "./catalog/types";
 import type { Row } from "./import/sheet";
+import type { CustomerItem, CustomerRecord } from "./import/types";
 import type { Campaign } from "./types";
 
 /**
@@ -81,4 +83,50 @@ export function demoSheet(): Row[] {
   const total = rows.slice(1).reduce((s, r) => s + Number(r[5]), 0);
   rows.push(["Total", null, null, null, null, total, null, null, null, null]);
   return rows;
+}
+
+/** Simple product drawing as a data URI, so the demo needs no image host. */
+function demoImage(label: string, tint: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="360" viewBox="0 0 360 360"><rect width="360" height="360" fill="${tint}"/><g fill="none" stroke="#b08d57" stroke-width="6"><path d="M180 92l58 58-58 118-58-118z"/><path d="M122 150h116M150 92l30 58 30-58M180 150v118"/></g><text x="180" y="318" font-family="Georgia,serif" font-size="22" fill="#6b5a3a" text-anchor="middle">${label}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/** Synthetic catalog for the demo: every purchased SKU plus new-season items. */
+export function demoCatalog(customers: CustomerRecord[]): Product[] {
+  const purchased = new Map<string, CustomerItem>();
+  for (const c of customers) for (const i of c.items) if (!purchased.has(i.sku) || (!purchased.get(i.sku)!.name && i.name)) purchased.set(i.sku, i);
+
+  const products: Product[] = [];
+  const newByCategory = new Map<string, string[]>();
+  const categories = [...new Set([...purchased.values()].map((i) => i.category))].sort();
+  categories.forEach((cat, ci) => {
+    for (let k = 0; k < 3; k++) {
+      const lab = k % 2 === 0;
+      const sku = `${lab ? "L" : ""}NEW${ci}${k}-14WD`;
+      const name = `${["Aurora", "Celeste", "Lumen"][k]} ${cat.replace(/s$/, "")}`;
+      products.push({ sku, name, imageUrl: demoImage(name, "#eceff5"), productUrl: `https://store.example/products/${sku.toLowerCase()}`, category: cat, origin: lab ? "Lab grown" : "Natural", inStock: true, isNew: true });
+      newByCategory.set(cat, [...(newByCategory.get(cat) ?? []), sku]);
+    }
+  });
+
+  [...purchased.values()]
+    .sort((a, b) => a.sku.localeCompare(b.sku))
+    .forEach((i, n) => {
+      const outOfStock = n % 13 === 6;
+      const successor = outOfStock && n % 2 === 0 ? newByCategory.get(i.category)?.[0] : undefined;
+      // Most products the sales file couldn't describe are named in the catalog; one is not.
+      const name = i.name || (n % 5 === 0 ? "" : `Classic ${i.category.replace(/s$/, "")} ${i.sku.split("-")[0]}`);
+      products.push({
+        sku: i.sku,
+        name: name ? name.replace(/\s+/g, " ") : "",
+        imageUrl: n % 9 === 4 ? undefined : demoImage(i.category, "#f2ede4"),
+        productUrl: `https://store.example/products/${i.sku.toLowerCase()}`,
+        category: i.category,
+        origin: i.origin,
+        inStock: !outOfStock,
+        isNew: false,
+        successorSku: successor,
+      });
+    });
+  return products;
 }

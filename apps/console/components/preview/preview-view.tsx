@@ -1,7 +1,7 @@
 "use client";
 
 import { buildEmailModel, emailChecks, renderMailchimpTemplate, renderPreviewHtml } from "@reorder/email";
-import { formatNumber, type MappingRow } from "@reorder/core";
+import { formatNumber, picksFor, type MappingRow } from "@reorder/core";
 import { AlertTriangle, Check, Download, ExternalLink, Search, XCircle } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -24,7 +24,7 @@ function sortForPreview(rows: MappingRow[]) {
 }
 
 export function PreviewView() {
-  const { campaign, mapping } = useCurrentCampaign();
+  const { campaign, mapping, catalog, catalogUploaded, edits, picks } = useCurrentCampaign();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -44,11 +44,19 @@ export function PreviewView() {
 
   const email = useMemo(() => {
     if (!row) return undefined;
-    const model = buildEmailModel({ customer: row.customer, emails: row.emails, campaignName: campaign.name, seasonStart: campaign.seasonStart });
+    const model = buildEmailModel({
+      customer: row.customer,
+      emails: row.emails,
+      campaignName: campaign.name,
+      seasonStart: campaign.seasonStart,
+      catalog,
+      edits,
+      picks: picksFor(row.customer, picks, catalog, edits),
+    });
     const html = renderPreviewHtml(model);
     const bytes = new TextEncoder().encode(html).length;
-    return { model, html, checks: emailChecks(model, { approved: row.status === "approved", htmlBytes: bytes, catalogUploaded: false }) };
-  }, [row, campaign.name, campaign.seasonStart]);
+    return { model, html, checks: emailChecks(model, { approved: row.status === "approved", htmlBytes: bytes, catalogUploaded }) };
+  }, [row, campaign.name, campaign.seasonStart, catalog, edits, picks, catalogUploaded]);
 
   const crumbs = [{ label: campaign.name, href: `/campaigns/${campaign.id}/overview` }, { label: "Step 5" }];
 

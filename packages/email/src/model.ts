@@ -1,6 +1,5 @@
-import type { CustomerRecord } from "@reorder/core";
+import { EMPTY_EDITS, metalFromSku, resolveItems, segmentOf, type CatalogIndex, type CustomerRecord, type Product, type ProductEdits } from "@reorder/core";
 import { firstNameFromEmail, repDisplayName } from "./names";
-import { displayProductName, metalFromSku } from "./product";
 
 export interface Brand {
   brandName: string;
@@ -46,8 +45,10 @@ export interface EmailModel {
   items: EmailItem[];
   /** Products bought last season that aren't shown. */
   moreCount: number;
-  /** Products skipped because they have no description. */
-  undescribedCount: number;
+  /** Products left out of the email, by reason. */
+  leftOut: { noName: number; outOfStock: number; hidden: number };
+  /** Shown products that were swapped for their replacement. */
+  replacedCount: number;
   totalProducts: number;
   reorderUrl?: string;
   picks: EmailPick[];
@@ -66,7 +67,11 @@ export interface BuildEmailInput {
   topN?: number;
   brand?: Brand;
   reorderUrl?: string;
-  picks?: EmailPick[];
+  /** Catalog and Product check edits; without them items show sales descriptions and no images. */
+  catalog?: CatalogIndex;
+  edits?: ProductEdits;
+  /** New-season products for this customer (see picksFor). */
+  picks?: Product[];
 }
 
 /** First real word of the campaign name: "Holiday 2026 Reorder" -> "holiday". */
@@ -80,17 +85,6 @@ export function seasonCodeFrom(campaignName: string, seasonStart: string): strin
   return `${seasonWordFrom(campaignName).toUpperCase()}-${seasonStart.slice(0, 4)}`;
 }
 
-function segmentFor(c: CustomerRecord): string {
-  const byOrigin = new Map<string, number>();
-  const byCategory = new Map<string, number>();
-  for (const i of c.items) {
-    if (i.origin) byOrigin.set(i.origin, (byOrigin.get(i.origin) ?? 0) + i.qty);
-    byCategory.set(i.category, (byCategory.get(i.category) ?? 0) + i.qty);
-  }
-  const top = (m: Map<string, number>) => [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
-  return [top(byOrigin), top(byCategory)].filter(Boolean).join(" · ") || "All customers";
-}
-
 export function buildEmailModel(input: BuildEmailInput): EmailModel {
   const { customer: c } = input;
   const topN = input.topN ?? 3;
@@ -98,8 +92,12 @@ export function buildEmailModel(input: BuildEmailInput): EmailModel {
   const first = to.map(firstNameFromEmail).find(Boolean);
   const seasonWord = seasonWordFrom(input.campaignName);
   const Season = seasonWord.charAt(0).toUpperCase() + seasonWord.slice(1);
-  const described = c.items.filter((i) => i.name);
-  const shown = described.slice(0, topN);
+  const edits = input.edits ?? EMPTY_EDITS;
+  const resolved = resolveItems(c, input.catalog ?? new Map(), edits);
+  const included = resolved.filter((r) => !r.excluded);
+  const shown = included.slice(0, topN);
+  const count = (reason: string) => resolved.filter((r) => r.excluded === reason).length;
+  const catalog = input.catalog;
 
   return {
     accountId: c.accountId,
@@ -112,19 +110,25 @@ export function buildEmailModel(input: BuildEmailInput): EmailModel {
     intro: `${Season} season is here. These pieces sold for you last year, so here they are again, ready to restock in a click.`,
     seasonWord,
     seasonCode: seasonCodeFrom(input.campaignName, input.seasonStart),
-    items: shown.map((i) => ({
-      sku: i.sku,
-      name: displayProductName(i.name),
-      meta: [i.origin, metalFromSku(i.sku)].filter(Boolean).join(" · "),
-      qty: i.qty,
+    items: shown.map((r) => ({
+      sku: r.sku,
+      name: r.name,
+      meta: [catalog?.get(r.sku)?.origin ?? r.item.origin, metalFromSku(r.sku)].filter(Boolean).join(" · "),
+      qty: r.item.qty,
+      imageUrl: r.imageUrl,
+      url: r.url,
     })),
-    moreCount: Math.max(0, c.items.length - shown.length),
-    undescribedCount: c.items.length - described.length,
+    moreCount: Math.max(0, included.length - shown.length),
+    leftOut: { noName: count("no_name"), outOfStock: count("out_of_stock"), hidden: count("hidden") },
+    replacedCount: shown.filter((r) => r.replacedFrom).length,
     totalProducts: c.items.length,
     reorderUrl: input.reorderUrl,
-    picks: input.picks ?? [{}, {}, {}],
+    picks: [0, 1, 2].map((i) => {
+      const p = input.picks?.[i];
+      return p ? { name: edits.displayName[p.sku] ?? p.name, imageUrl: p.imageUrl, url: p.productUrl } : {};
+    }),
     repName: repDisplayName(c.rep),
-    segment: segmentFor(c),
+    segment: segmentOf(c),
     brand: input.brand ?? PLACEHOLDER_BRAND,
   };
 }

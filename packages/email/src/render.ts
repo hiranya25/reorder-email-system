@@ -31,6 +31,8 @@ function safeUrl(url: string | undefined): string | undefined {
 interface Slots {
   text: (value: string | undefined, tag: string) => string;
   url: (value: string | undefined, tag: string) => string | undefined;
+  /** Image sources; the preview also accepts inline data:image URIs (demo catalog). */
+  img: (value: string | undefined, tag: string) => string | undefined;
   /** Renders `html` only when the slot has content. */
   when: (present: boolean, tag: string, html: string) => string;
   /** Preview-only placeholder (e.g. "Product image from catalog"); never in the template. */
@@ -40,6 +42,7 @@ interface Slots {
 const previewSlots: Slots = {
   text: (v) => escapeHtml(v ?? ""),
   url: (v) => safeUrl(v),
+  img: (v) => (v && /^data:image\/(png|jpe?g|gif|webp|svg\+xml)[;,]/i.test(v) ? escapeHtml(v) : safeUrl(v)),
   when: (present, _tag, html) => (present ? html : ""),
   preview: true,
 };
@@ -47,6 +50,7 @@ const previewSlots: Slots = {
 const mergeSlots: Slots = {
   text: (_v, tag) => `*|${tag}|*`,
   url: (_v, tag) => `*|${tag}|*`,
+  img: (_v, tag) => `*|${tag}|*`,
   when: (_present, tag, html) => `*|IF:${tag}|*${html}*|END:IF|*`,
   preview: false,
 };
@@ -75,7 +79,7 @@ function itemCard(m: EmailModel, i: number, s: Slots): string {
   const item = m.items[i];
   const name = s.text(item?.name, `ITEM${n}_NAME`);
   const href = s.url(item?.url, `ITEM${n}_URL`);
-  const img = s.url(item?.imageUrl, `ITEM${n}_IMG`);
+  const img = s.img(item?.imageUrl, `ITEM${n}_IMG`);
   const body = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ${C.line};margin-bottom:12px;">
 <tr><td>${imageCell(img, name, s.preview ? "Product image<br/>from catalog" : "", C.cream)}</td></tr>
 <tr><td style="padding:12px;font:15px/1.3 ${FONT};color:${C.ink};">
@@ -93,9 +97,10 @@ function pickCard(m: EmailModel, i: number, s: Slots): string {
   const chosen = !!pick?.name;
   const name = chosen || !s.preview ? s.text(pick?.name, `REC${n}_NAME`) : "[New style name]";
   const href = s.url(pick?.url, `REC${n}_URL`);
-  const img = s.url(pick?.imageUrl, `REC${n}_IMG`);
+  const img = s.img(pick?.imageUrl, `REC${n}_IMG`);
+  const placeholder = !s.preview ? "" : chosen ? "Image missing<br/>in catalog" : `New-season pick ${n}<br/>(not chosen yet)`;
   const body = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ${C.line};margin-bottom:12px;">
-<tr><td>${imageCell(img, name, s.preview ? `New-season pick ${n}<br/>(not chosen yet)` : "", C.pick)}</td></tr>
+<tr><td>${imageCell(img, name, placeholder, C.pick)}</td></tr>
 <tr><td style="padding:12px;font:15px/1.3 ${FONT};color:${C.ink};">
 <div style="font-weight:bold;">${name}</div>
 <div style="margin-top:6px;font-size:14px;"><a href="${href ?? "#"}" style="color:${C.ink};font-weight:bold;">View style &rarr;</a></div>

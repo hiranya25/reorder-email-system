@@ -1,22 +1,24 @@
 "use client";
 
-import { cellText, FIELDS, type ColumnMapping, type FieldKey, type Row } from "@reorder/core";
+import { cellText, FIELDS, type FieldDef, type Row } from "@reorder/core";
 import { StatusChip } from "../ui/status-chip";
 
 const selectClass =
   "h-9 w-full rounded-lg border border-line bg-white px-2.5 text-sm focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/15";
 
-export function ColumnMapper({
+export function ColumnMapper<K extends string>({
   headers,
   rows,
   mapping,
   onChange,
+  fields = FIELDS as unknown as FieldDef<K>[],
 }: {
   headers: string[];
   /** Data rows (below the header), used for example values. */
   rows: Row[];
-  mapping: ColumnMapping;
-  onChange: (mapping: ColumnMapping) => void;
+  mapping: Partial<Record<K, number>>;
+  onChange: (mapping: Partial<Record<K, number>>) => void;
+  fields?: FieldDef<K>[];
 }) {
   const example = (col: number | undefined) => {
     if (col === undefined) return "";
@@ -27,13 +29,13 @@ export function ColumnMapper({
     return "";
   };
 
-  const set = (key: FieldKey, value: string) => {
-    const next: ColumnMapping = { ...mapping };
+  const set = (key: K, value: string) => {
+    const next: Partial<Record<K, number>> = { ...mapping };
     if (value === "") delete next[key];
     else {
       const col = Number(value);
       // A column can feed only one field.
-      for (const k of Object.keys(next) as FieldKey[]) if (next[k] === col) delete next[k];
+      for (const k of Object.keys(next) as K[]) if (next[k] === col) delete next[k];
       next[key] = col;
     }
     onChange(next);
@@ -41,7 +43,7 @@ export function ColumnMapper({
 
   return (
     <div className="divide-y divide-line">
-      {FIELDS.map((f) => {
+      {fields.map((f) => {
         const col = mapping[f.key];
         const missing = f.required && col === undefined;
         return (

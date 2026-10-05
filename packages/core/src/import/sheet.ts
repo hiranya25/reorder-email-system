@@ -1,10 +1,10 @@
-import { FIELDS, type FieldKey } from "./fields";
+import { FIELDS, type FieldDef, type FieldKey } from "./fields";
 
 export type Cell = string | number | boolean | Date | null | undefined;
 export type Row = Cell[];
 
 /** Column index in the sheet for each field. Missing key = not in the file. */
-export type ColumnMapping = Partial<Record<FieldKey, number>>;
+export type ColumnMapping<K extends string = FieldKey> = Partial<Record<K, number>>;
 
 export function cellText(cell: Cell): string {
   if (cell === null || cell === undefined) return "";
@@ -34,7 +34,7 @@ function scoreHeader(header: string, aliases: string[]): number {
 }
 
 /** Picks the row (within the first 20) whose cells look most like column headers. */
-export function detectHeaderRow(rows: Row[]): number {
+export function detectHeaderRow(rows: Row[], fields: FieldDef<string>[] = FIELDS): number {
   let bestRow = -1;
   let bestScore = 0;
   for (let r = 0; r < Math.min(rows.length, 20); r++) {
@@ -42,7 +42,7 @@ export function detectHeaderRow(rows: Row[]): number {
     let score = 0;
     for (const cell of row) {
       if (typeof cell !== "string") continue;
-      if (FIELDS.some((f) => scoreHeader(cell, f.aliases) > 0)) score++;
+      if (fields.some((f) => scoreHeader(cell, f.aliases) > 0)) score++;
     }
     if (score > bestScore) {
       bestScore = score;
@@ -55,19 +55,19 @@ export function detectHeaderRow(rows: Row[]): number {
 }
 
 /** Suggests a column for each field: best header score wins, each column is used once. */
-export function suggestMapping(headers: string[]): ColumnMapping {
-  const candidates: { key: FieldKey; col: number; score: number }[] = [];
-  for (const field of FIELDS) {
+export function suggestMapping<K extends string = FieldKey>(headers: string[], fields: FieldDef<K>[] = FIELDS as unknown as FieldDef<K>[]): ColumnMapping<K> {
+  const candidates: { key: K; col: number; score: number }[] = [];
+  for (const field of fields) {
     headers.forEach((header, col) => {
       const score = scoreHeader(header, field.aliases);
       if (score > 0) candidates.push({ key: field.key, col, score });
     });
   }
   // Higher scores first; ties go to the field listed first, then the leftmost column.
-  const fieldOrder = (k: FieldKey) => FIELDS.findIndex((f) => f.key === k);
+  const fieldOrder = (k: K) => fields.findIndex((f) => f.key === k);
   candidates.sort((a, b) => b.score - a.score || fieldOrder(a.key) - fieldOrder(b.key) || a.col - b.col);
 
-  const mapping: ColumnMapping = {};
+  const mapping: ColumnMapping<K> = {};
   const usedCols = new Set<number>();
   for (const c of candidates) {
     if (mapping[c.key] !== undefined || usedCols.has(c.col)) continue;
@@ -77,8 +77,8 @@ export function suggestMapping(headers: string[]): ColumnMapping {
   return mapping;
 }
 
-export function missingRequiredFields(mapping: ColumnMapping): FieldKey[] {
-  return FIELDS.filter((f) => f.required && mapping[f.key] === undefined).map((f) => f.key);
+export function missingRequiredFields<K extends string = FieldKey>(mapping: ColumnMapping<K>, fields: FieldDef<K>[] = FIELDS as unknown as FieldDef<K>[]): K[] {
+  return fields.filter((f) => f.required && mapping[f.key] === undefined).map((f) => f.key);
 }
 
 /** Stable key for a set of headers, so a saved mapping is reused when the same export comes back. */
@@ -87,21 +87,21 @@ export function headerSignature(headers: string[]): string {
 }
 
 /** Mapping stored by header name, so it survives columns being reordered. */
-export type NamedMapping = Partial<Record<FieldKey, string>>;
+export type NamedMapping<K extends string = FieldKey> = Partial<Record<K, string>>;
 
-export function toNamedMapping(mapping: ColumnMapping, headers: string[]): NamedMapping {
-  const named: NamedMapping = {};
-  for (const [key, col] of Object.entries(mapping) as [FieldKey, number][]) {
+export function toNamedMapping<K extends string = FieldKey>(mapping: ColumnMapping<K>, headers: string[]): NamedMapping<K> {
+  const named: NamedMapping<K> = {};
+  for (const [key, col] of Object.entries(mapping) as [K, number][]) {
     const header = headers[col];
     if (header) named[key] = header;
   }
   return named;
 }
 
-export function fromNamedMapping(named: NamedMapping, headers: string[]): ColumnMapping {
+export function fromNamedMapping<K extends string = FieldKey>(named: NamedMapping<K>, headers: string[]): ColumnMapping<K> {
   const byName = new Map(headers.map((h, i) => [normalizeHeader(h), i]));
-  const mapping: ColumnMapping = {};
-  for (const [key, header] of Object.entries(named) as [FieldKey, string][]) {
+  const mapping: ColumnMapping<K> = {};
+  for (const [key, header] of Object.entries(named) as [K, string][]) {
     const col = byName.get(normalizeHeader(header));
     if (col !== undefined) mapping[key] = col;
   }

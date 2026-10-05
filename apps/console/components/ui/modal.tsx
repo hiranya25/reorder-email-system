@@ -9,11 +9,13 @@ export function Modal({
   onClose,
   title,
   children,
+  wide = false,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
 
@@ -29,7 +31,7 @@ export function Modal({
       ref={ref}
       onClose={onClose}
       onClick={(e) => e.target === ref.current && onClose()}
-      className="m-auto w-[min(480px,calc(100vw-32px))] rounded-xl border border-line bg-white p-0 text-ink shadow-xl backdrop:bg-black/40"
+      className={`m-auto ${wide ? "w-[min(760px,calc(100vw-32px))]" : "w-[min(480px,calc(100vw-32px))]"} rounded-xl border border-line bg-white p-0 text-ink shadow-xl backdrop:bg-black/40`}
     >
       <div className="flex items-center justify-between border-b border-line px-5 py-4">
         <h2 className="text-[17px] font-semibold">{title}</h2>

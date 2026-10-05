@@ -14,8 +14,8 @@ import { Modal } from "../ui/modal";
 import { StatusChip } from "../ui/status-chip";
 import { PageHeader } from "./page-header";
 
-function progressFor(c: Campaign, record: ImportRecord | undefined, decided: number) {
-  const steps = stepsFor(c.isDemo ? demoImport() : record, decided);
+function progressFor(c: Campaign, record: ImportRecord | undefined, decided: number, extra: { catalogUploaded: boolean; productsConfirmed: boolean }) {
+  const steps = stepsFor(c.isDemo ? demoImport() : record, decided, extra);
   const n = currentStepNumber(steps);
   const blocked = steps.filter((s) => s.state === "blocked").map((s) => s.label);
   return { n, steps, blocked };
@@ -34,6 +34,9 @@ export function CampaignsHome() {
   const imports = useConsoleStore((s) => s.imports);
   const decisions = useConsoleStore((s) => s.decisions);
   const remembered = useConsoleStore((s) => s.remembered);
+  const hasCatalog = useConsoleStore((s) => !!s.catalog?.products.length);
+  const demoCatalogLoaded = useConsoleStore((s) => s.demoCatalogLoaded);
+  const productsConfirmed = useConsoleStore((s) => s.productsConfirmed);
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(defaultSeason);
@@ -66,7 +69,10 @@ export function CampaignsHome() {
             {campaigns.map((c) => {
               const record = c.isDemo ? demoImport() : imports[c.id];
               const decided = mappingFor(c, record, decisions[c.id], remembered).filter((r) => r.status !== "pending").length;
-              const { n, steps, blocked } = progressFor(c, record, decided);
+              const { n, steps, blocked } = progressFor(c, record, decided, {
+                catalogUploaded: c.isDemo ? demoCatalogLoaded : hasCatalog,
+                productsConfirmed: !!productsConfirmed[c.id],
+              });
               return (
                 <tr key={c.id} className="hover:bg-canvas/50">
                   <td className="px-5 py-4">

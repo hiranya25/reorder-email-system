@@ -31,4 +31,15 @@ describe("deriveSteps", () => {
     expect(steps[1]?.state).toBe("done");
     expect(steps[2]?.state).toBe("in_progress");
   });
+
+  it("tracks product check, picks and preview", () => {
+    const steps = deriveSteps({ ...base, summary: DEMO_SUMMARY, decidedAccounts: 210, catalogUploaded: true, productsConfirmed: true, recommendations: { filled: 4, total: 4 } });
+    expect(steps.slice(2, 5).map((s) => [s.state, s.detail])).toEqual([
+      ["done", "Checked"],
+      ["done", "4 groups picked"],
+      ["in_progress", "Ready to preview"],
+    ]);
+    const partial = deriveSteps({ ...base, summary: DEMO_SUMMARY, catalogUploaded: true, recommendations: { filled: 1, total: 4 } });
+    expect(partial[3]).toMatchObject({ state: "in_progress", detail: "1 of 4 groups picked" });
+  });
 });

@@ -5,7 +5,7 @@ import { Download } from "lucide-react";
 import { downloadCsv } from "@/lib/download";
 import { StatusChip, type Tone } from "../ui/status-chip";
 
-function Item({ item, tone, label }: { item: ReportItem; tone: Tone; label: string }) {
+export function ReportItemRow({ item, tone, label }: { item: ReportItem; tone: Tone; label: string }) {
   return (
     <li className="flex gap-3 py-3">
       <StatusChip tone={tone} className="h-fit w-[92px] shrink-0 justify-center">
@@ -48,13 +48,13 @@ export function ReportPanel({ report, summary }: { report: ValidationReport; sum
       )}
       <ul className="divide-y divide-line border-t border-line">
         {report.errors.map((e) => (
-          <Item key={e.id} item={e} tone="bad" label="Error" />
+          <ReportItemRow key={e.id} item={e} tone="bad" label="Error" />
         ))}
         {report.warnings.map((w) => (
-          <Item key={w.id} item={w} tone="warn" label="Warning" />
+          <ReportItemRow key={w.id} item={w} tone="warn" label="Warning" />
         ))}
         {report.autoFixes.map((f) => (
-          <Item key={f.id} item={f} tone="ok" label="Auto-fixed" />
+          <ReportItemRow key={f.id} item={f} tone="ok" label="Auto-fixed" />
         ))}
         {!blocked && report.warnings.length === 0 && report.autoFixes.length === 0 && (
           <li className="py-3 text-[13px] text-ok-fg">No problems found.</li>
