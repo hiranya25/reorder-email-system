@@ -5,7 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { stepsFor } from "@/lib/campaign-data";
+import { mappingFor, stepsFor } from "@/lib/campaign-data";
 import { demoImport } from "@/lib/demo-import";
 import { useAllCampaigns, useConsoleStore } from "@/lib/store";
 import { Button } from "../ui/button";
@@ -14,8 +14,8 @@ import { Modal } from "../ui/modal";
 import { StatusChip } from "../ui/status-chip";
 import { PageHeader } from "./page-header";
 
-function progressFor(c: Campaign, record: ImportRecord | undefined) {
-  const steps = stepsFor(c.isDemo ? demoImport() : record);
+function progressFor(c: Campaign, record: ImportRecord | undefined, decided: number) {
+  const steps = stepsFor(c.isDemo ? demoImport() : record, decided);
   const n = currentStepNumber(steps);
   const blocked = steps.filter((s) => s.state === "blocked").map((s) => s.label);
   return { n, steps, blocked };
@@ -32,6 +32,8 @@ export function CampaignsHome() {
   const createCampaign = useConsoleStore((s) => s.createCampaign);
   const deleteCampaign = useConsoleStore((s) => s.deleteCampaign);
   const imports = useConsoleStore((s) => s.imports);
+  const decisions = useConsoleStore((s) => s.decisions);
+  const remembered = useConsoleStore((s) => s.remembered);
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(defaultSeason);
@@ -62,7 +64,9 @@ export function CampaignsHome() {
           </thead>
           <tbody className="divide-y divide-line">
             {campaigns.map((c) => {
-              const { n, steps, blocked } = progressFor(c, imports[c.id]);
+              const record = c.isDemo ? demoImport() : imports[c.id];
+              const decided = mappingFor(c, record, decisions[c.id], remembered).filter((r) => r.status !== "pending").length;
+              const { n, steps, blocked } = progressFor(c, record, decided);
               return (
                 <tr key={c.id} className="hover:bg-canvas/50">
                   <td className="px-5 py-4">

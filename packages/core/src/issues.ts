@@ -12,11 +12,15 @@ const MAX_INDIVIDUAL = 3;
 export interface IssueContext {
   catalogUploaded: boolean;
   largeAccountProducts: number;
+  /** Accounts already approved or excluded; their review issues are resolved. */
+  decided?: Set<string>;
 }
 
 /** Everything the Overview lists under "Issues to resolve before sending". */
 export function buildIssues(result: ImportResult, ctx: IssueContext): Issue[] {
-  const { customers, stats, report } = result;
+  const { stats, report } = result;
+  const open = (c: { accountId: string }) => !ctx.decided?.has(c.accountId);
+  const customers = result.customers;
   const issues: Issue[] = [];
   const skuCount = new Set(customers.flatMap((c) => c.items.map((i) => i.sku))).size;
 
@@ -32,27 +36,27 @@ export function buildIssues(result: ImportResult, ctx: IssueContext): Issue[] {
     });
   }
 
-  const generic = customers.filter((c) => c.reasons.includes("generic_inbox"));
+  const generic = customers.filter((c) => open(c) && c.reasons.includes("generic_inbox"));
   if (generic.length) {
     issues.push({ id: "generic", severity: "review", message: `${n(generic.length)} account${generic.length === 1 ? " uses" : "s use"} a generic inbox (info@, sales@, office@) that may not reach the buyer.`, action: { label: "Review", href: "mapping?filter=generic", kind: "link" } });
   }
 
   // Each shared email once, not once per account.
   const sharedGroups = new Map<string, string[]>();
-  for (const c of customers.filter((c) => c.reasons.includes("shared_email"))) {
+  for (const c of customers.filter((c) => open(c) && c.reasons.includes("shared_email"))) {
     const key = [c.accountId, ...c.sharedWith.map((s) => s.accountId)].sort().join("|");
     if (!sharedGroups.has(key)) sharedGroups.set(key, [c.name, ...c.sharedWith.map((s) => s.name)]);
   }
   if (sharedGroups.size > MAX_INDIVIDUAL) {
-    issues.push({ id: "shared", severity: "review", message: `${n(sharedGroups.size)} groups of accounts share one email. Merge each into a single email?`, action: { label: "Review", href: "mapping?filter=shared", kind: "link" } });
+    issues.push({ id: "shared", severity: "review", message: `${n(sharedGroups.size)} groups of accounts share one email. Each account gets its own email unless you exclude one.`, action: { label: "Review", href: "mapping?filter=shared", kind: "link" } });
   } else {
     for (const [key, names] of sharedGroups) {
       const list = names.length === 2 ? `${names[0]} and ${names[1]}` : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-      issues.push({ id: `shared:${key}`, severity: "review", message: `${list} share one email. Merge into a single email?`, action: { label: "Review", href: "mapping?filter=shared", kind: "link" } });
+      issues.push({ id: `shared:${key}`, severity: "review", message: `${list} share one email. Each gets its own email unless you exclude one.`, action: { label: "Review", href: "mapping?filter=shared", kind: "link" } });
     }
   }
 
-  const multi = customers.filter((c) => c.reasons.includes("multi_email"));
+  const multi = customers.filter((c) => open(c) && c.reasons.includes("multi_email"));
   if (multi.length > MAX_INDIVIDUAL) {
     issues.push({ id: "multi", severity: "review", message: `${n(multi.length)} accounts have more than one email in one field. Pick one or send to both.`, action: { label: "Review", href: "mapping?filter=multi", kind: "link" } });
   } else {
@@ -61,7 +65,7 @@ export function buildIssues(result: ImportResult, ctx: IssueContext): Issue[] {
     }
   }
 
-  const large = customers.filter((c) => c.large);
+  const large = customers.filter((c) => open(c) && c.large);
   if (large.length) {
     issues.push({ id: "large", severity: "review", message: `${n(large.length)} large account${large.length === 1 ? "" : "s"} bought more than ${ctx.largeAccountProducts} products each. A top-3 email under-represents them; consider a rep follow-up instead.`, action: { label: "Review", href: "mapping?filter=large", kind: "link" } });
   }
