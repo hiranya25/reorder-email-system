@@ -22,5 +22,6 @@ Until the backend exists, uploads are read and stored in your browser only (Inde
 
 ```
 apps/console     Next.js app: the Reorder Console UI
-packages/core    Business rules with no I/O: import pipeline, email checks, summary, issues, steps
+packages/core    Business rules with no I/O: import pipeline, email checks, mapping decisions, summary, issues, steps
+packages/email   Customer email: model, hand-coded HTML (preview and Mailchimp merge-tag template), merge fields, checks
 ```
