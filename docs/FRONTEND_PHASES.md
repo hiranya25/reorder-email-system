@@ -16,6 +16,8 @@ Email brand stays as the `[YOUR BRAND]` placeholder.
 Notes:
 - Decisions agreed for mapping: accounts sharing one email each get their own email (no merging); a field with two emails can send to one or both; large accounts are emailed normally and flagged for a rep follow-up.
 - Excel files are read with `read-excel-file` (.xlsx) and CSVs with `papaparse`. The SheetJS copy on npm is an old version with known security issues, and its own download server isn't reachable from the build environment. Old `.xls` files are rejected with a "save as .xlsx" message.
+- Email: greeting uses a first name only when the email address clearly starts with one (oliver@ -> "Hi Oliver,"), otherwise "Hi <Company> team,". The Reorder button is a placeholder until open question #4 is decided; the preview flags it.
+- Mailchimp merge tags can be at most 10 characters, so tags differ slightly from plan §10.1: `GREETING, COMPANY, CUST_ID, SEASON, MORECOUNT, REPNAME, REORDERURL, ITEMn_NAME/_META/_SKU/_QTY/_IMG/_URL, RECn_NAME/_IMG/_URL`.
 - Browser data lives in IndexedDB (falls back to memory when storage is blocked).
 
 The backend (DB, auth, Mailchimp sync) follows these phases, as described in `IMPLEMENTATION_PLAN.md`.
