@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/* Design tokens sampled from the Reorder Console mockups. */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-face), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: var(--font-serif-face), Georgia, serif;
+
+  --color-sidebar: #141a26;
+  --color-sidebar-active: #232d42;
+  --color-sidebar-muted: #7d8597;
+  --color-navy: #1e2a44;
+  --color-navy-hover: #2a3858;
+  --color-gold: #b08d57;
+  --color-gold-soft: #d9c49a;
+  --color-gold-strong: #c4a46d;
+  --color-cream: #f2ede4;
+  --color-canvas: #f3f4f6;
+  --color-line: #e5e7eb;
+  --color-ink: #111827;
+  --color-ink-muted: #6b7280;
+  --color-track: #eceef2;
+
+  --color-ok-bg: #e3f1e7;
+  --color-ok-fg: #1f6b3a;
+  --color-warn-bg: #fbefd9;
+  --color-warn-fg: #8a5a00;
+  --color-bad-bg: #f8e1e1;
+  --color-bad-fg: #a12a2a;
+}
+
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
