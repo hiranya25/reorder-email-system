@@ -1,5 +1,8 @@
+"use client";
+
 import type { Issue, IssueSeverity } from "@reorder/core";
 import Link from "next/link";
+import { downloadCsv } from "@/lib/download";
 import { ButtonLink, Button } from "../ui/button";
 import { Card, CardHeader } from "../ui/card";
 import { StatusChip, type Tone } from "../ui/status-chip";
@@ -35,7 +38,11 @@ export function IssueList({ issues, basePath }: { issues: Issue[]; basePath: str
                 </StatusChip>
                 <p className="flex-1 text-[14px]">{issue.message}</p>
                 {issue.action &&
-                  (issue.action.kind === "link" && href ? (
+                  (issue.action.download ? (
+                    <Button variant="secondary" onClick={() => downloadCsv(issue.action!.download!.fileName, issue.action!.download!.csv)}>
+                      {issue.action.label}
+                    </Button>
+                  ) : issue.action.kind === "link" && href ? (
                     <Link href={href} className="text-[14px] font-semibold underline underline-offset-4">
                       {issue.action.label}
                     </Link>
@@ -44,7 +51,7 @@ export function IssueList({ issues, basePath }: { issues: Issue[]; basePath: str
                       {issue.action.label}
                     </ButtonLink>
                   ) : (
-                    <Button variant="secondary" disabled title="Available once the import is wired up (phase F2)">
+                    <Button variant="secondary" disabled>
                       {issue.action.label}
                     </Button>
                   ))}

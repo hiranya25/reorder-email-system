@@ -16,11 +16,11 @@ pnpm test         # unit tests (packages/core)
 pnpm lint && pnpm typecheck && pnpm build
 ```
 
-Until the backend exists, campaigns are stored in your browser only. The **Holiday 2026 Reorder (demo)** campaign uses synthetic numbers.
+Until the backend exists, uploads are read and stored in your browser only (IndexedDB). The **Holiday 2026 Reorder (demo)** campaign runs a synthetic sample export through the same pipeline; download it from the Import screen to try an upload.
 
 ## Layout
 
 ```
 apps/console     Next.js app: the Reorder Console UI
-packages/core    Business rules with no I/O (steps, formatting; parsing and matching arrive in F2)
+packages/core    Business rules with no I/O: import pipeline, email checks, summary, issues, steps
 ```
