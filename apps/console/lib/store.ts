@@ -4,8 +4,10 @@ import {
   DEFAULT_RULES,
   DEMO_CAMPAIGN,
   type Campaign,
+  type CatalogRecord,
   type Decision,
   type ImportRecord,
+  type RecommendationPicks,
   type RememberedContact,
   type NamedMapping,
   type ReviewRules,
@@ -29,6 +31,23 @@ interface ConsoleState {
   /** Approved addresses per account id, reused next season. */
   remembered: Record<string, RememberedContact>;
   decide: (campaignId: string, accountIds: string[], status: Decision["status"], emailsFor: (accountId: string) => string[]) => void;
+  /** Current product catalog (shared by all campaigns). */
+  catalog?: CatalogRecord;
+  /** The demo campaign uses a generated catalog once the user asks for it. */
+  demoCatalogLoaded: boolean;
+  /** Replacement SKUs and display names, kept across seasons. Demo edits are kept apart. */
+  productEdits: Record<"real" | "demo", { successor: Record<string, string>; displayName: Record<string, string> }>;
+  /** SKUs hidden per campaign. */
+  hiddenProducts: Record<string, string[]>;
+  productsConfirmed: Record<string, { at: string; by: string }>;
+  picks: Record<string, RecommendationPicks>;
+  saveCatalog: (record: CatalogRecord) => void;
+  loadDemoCatalog: () => void;
+  setHidden: (campaignId: string, sku: string, hidden: boolean) => void;
+  setSuccessor: (scope: "real" | "demo", sku: string, successor: string | undefined) => void;
+  setDisplayName: (scope: "real" | "demo", sku: string, name: string | undefined) => void;
+  confirmProducts: (campaignId: string, confirmed: boolean) => void;
+  setPicks: (campaignId: string, update: (picks: RecommendationPicks) => RecommendationPicks) => void;
   createCampaign: (input: Pick<Campaign, "name" | "seasonStart" | "seasonEnd">) => Campaign;
   updateCampaign: (id: string, patch: Partial<Omit<Campaign, "id">>) => void;
   deleteCampaign: (id: string) => void;
@@ -79,6 +98,43 @@ export const useConsoleStore = create<ConsoleState>()(
       rules: DEFAULT_RULES,
       decisions: {},
       remembered: {},
+      catalog: undefined,
+      demoCatalogLoaded: false,
+      productEdits: { real: { successor: {}, displayName: {} }, demo: { successor: {}, displayName: {} } },
+      hiddenProducts: {},
+      productsConfirmed: {},
+      picks: {},
+      saveCatalog: (record) => set({ catalog: record }),
+      loadDemoCatalog: () => set({ demoCatalogLoaded: true }),
+      setHidden: (campaignId, sku, hidden) =>
+        set((s) => {
+          const current = s.hiddenProducts[campaignId] ?? [];
+          const next = hidden ? [...new Set([...current, sku])] : current.filter((x) => x !== sku);
+          return { hiddenProducts: { ...s.hiddenProducts, [campaignId]: next } };
+        }),
+      setSuccessor: (scope, sku, successor) =>
+        set((s) => {
+          const map = { ...s.productEdits[scope].successor };
+          if (successor) map[sku] = successor;
+          else delete map[sku];
+          return { productEdits: { ...s.productEdits, [scope]: { ...s.productEdits[scope], successor: map } } };
+        }),
+      setDisplayName: (scope, sku, name) =>
+        set((s) => {
+          const map = { ...s.productEdits[scope].displayName };
+          if (name?.trim()) map[sku] = name.trim();
+          else delete map[sku];
+          return { productEdits: { ...s.productEdits, [scope]: { ...s.productEdits[scope], displayName: map } } };
+        }),
+      confirmProducts: (campaignId, confirmed) =>
+        set((s) => {
+          const next = { ...s.productsConfirmed };
+          if (confirmed) next[campaignId] = { at: new Date().toISOString(), by: CURRENT_USER.name };
+          else delete next[campaignId];
+          return { productsConfirmed: next };
+        }),
+      setPicks: (campaignId, update) =>
+        set((s) => ({ picks: { ...s.picks, [campaignId]: update(s.picks[campaignId] ?? { bySegment: {}, byCustomer: {} }) } })),
       decide: (campaignId, accountIds, status, emailsFor) =>
         set((s) => {
           const now = new Date().toISOString();
@@ -103,11 +159,19 @@ export const useConsoleStore = create<ConsoleState>()(
         set((s) => ({ campaigns: s.campaigns.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
       deleteCampaign: (id) =>
         set((s) => {
-          const imports = { ...s.imports };
-          delete imports[id];
-          const decisions = { ...s.decisions };
-          delete decisions[id];
-          return { campaigns: s.campaigns.filter((c) => c.id !== id), imports, decisions };
+          const drop = <T,>(rec: Record<string, T>) => {
+            const next = { ...rec };
+            delete next[id];
+            return next;
+          };
+          return {
+            campaigns: s.campaigns.filter((c) => c.id !== id),
+            imports: drop(s.imports),
+            decisions: drop(s.decisions),
+            hiddenProducts: drop(s.hiddenProducts),
+            productsConfirmed: drop(s.productsConfirmed),
+            picks: drop(s.picks),
+          };
         }),
       saveImport: (campaignId, record, signature, season) =>
         set((s) => ({
@@ -122,13 +186,38 @@ export const useConsoleStore = create<ConsoleState>()(
     }),
     {
       name: "reorder-console",
-      version: 3,
+      version: 4,
       storage: createJSONStorage(browserStorage),
       skipHydration: true,
-      partialize: ({ campaigns, imports, savedMappings, rules, decisions, remembered }) => ({ campaigns, imports, savedMappings, rules, decisions, remembered }),
+      partialize: (s) => ({
+        campaigns: s.campaigns,
+        imports: s.imports,
+        savedMappings: s.savedMappings,
+        rules: s.rules,
+        decisions: s.decisions,
+        remembered: s.remembered,
+        catalog: s.catalog,
+        demoCatalogLoaded: s.demoCatalogLoaded,
+        productEdits: s.productEdits,
+        hiddenProducts: s.hiddenProducts,
+        productsConfirmed: s.productsConfirmed,
+        picks: s.picks,
+      }),
       // Older versions lack the newer keys; fill them in.
       migrate: (persisted) =>
-        ({ imports: {}, savedMappings: {}, rules: DEFAULT_RULES, decisions: {}, remembered: {}, ...(persisted as object) }) as ConsoleState,
+        ({
+          imports: {},
+          savedMappings: {},
+          rules: DEFAULT_RULES,
+          decisions: {},
+          remembered: {},
+          demoCatalogLoaded: false,
+          productEdits: { real: { successor: {}, displayName: {} }, demo: { successor: {}, displayName: {} } },
+          hiddenProducts: {},
+          productsConfirmed: {},
+          picks: {},
+          ...(persisted as object),
+        }) as ConsoleState,
     },
   ),
 );

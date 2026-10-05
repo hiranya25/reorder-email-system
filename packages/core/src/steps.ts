@@ -18,6 +18,10 @@ export interface StepInputs {
   /** Accounts approved or excluded so far on the mapping screen. */
   decidedAccounts: number;
   catalogUploaded: boolean;
+  /** Reviewer confirmed the Product check screen. */
+  productsConfirmed?: boolean;
+  /** Groups with all 3 picks / total groups. */
+  recommendations?: { filled: number; total: number };
   approverLabel: string;
 }
 
@@ -43,9 +47,21 @@ export function deriveSteps(input: StepInputs): StepStatus[] {
               ? `${formatNumber(input.decidedAccounts)} of ${formatNumber(summary.customers)} decided`
               : `${formatNumber(summary.ready)} of ${formatNumber(summary.customers)} ready`,
         };
-    states.products = input.catalogUploaded
-      ? { state: mappingDone ? "in_progress" : "not_started", detail: "Catalog uploaded" }
-      : { state: "blocked", detail: "Catalog needed" };
+    states.products = !input.catalogUploaded
+      ? { state: "blocked", detail: "Catalog needed" }
+      : input.productsConfirmed
+        ? { state: "done", detail: "Checked" }
+        : { state: "in_progress", detail: "Catalog uploaded" };
+    const recs = input.recommendations;
+    if (input.catalogUploaded && recs) {
+      states.recommendations =
+        recs.total > 0 && recs.filled >= recs.total
+          ? { state: "done", detail: `${recs.total} group${recs.total === 1 ? "" : "s"} picked` }
+          : { state: "in_progress", detail: `${recs.filled} of ${recs.total} groups picked` };
+    }
+    if (mappingDone && input.productsConfirmed && states.recommendations?.state === "done") {
+      states.preview = { state: "in_progress", detail: "Ready to preview" };
+    }
   }
   states.approve = { state: "not_started", detail: input.approverLabel };
 

@@ -21,3 +21,17 @@ describe("demo dataset", () => {
     expect(result.stats.undescribedSkus.length).toBeGreaterThan(0);
   });
 });
+
+describe("demo catalog", () => {
+  it("covers purchased SKUs and adds new-season items with every problem type", async () => {
+    const { demoCatalog } = await import("./demo");
+    const { productCheck, indexCatalog } = await import("./catalog/resolve");
+    const { EMPTY_EDITS } = await import("./catalog/types");
+    const rows = demoSheet();
+    const result = processSales(rows, 0, suggestMapping(rows[0]!.map(cellText)), { seasonStart: DEMO_CAMPAIGN.seasonStart, seasonEnd: DEMO_CAMPAIGN.seasonEnd });
+    const products = demoCatalog(result.customers);
+    expect(products.filter((p) => p.isNew).length).toBeGreaterThanOrEqual(9);
+    const problems = new Set(productCheck(result.customers, indexCatalog(products), EMPTY_EDITS, 3).flatMap((r) => r.problems));
+    expect([...problems].sort()).toEqual(["no_image", "no_name", "out_of_stock", "replaced"]);
+  });
+});

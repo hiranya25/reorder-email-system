@@ -72,8 +72,8 @@ describe("email model", () => {
     const m = buildEmailModel({ ...base, customer: customer({ emails: ["info@x.com"], items: [item("A-14W", "", 5), item("B-14W", "Band", 1)] }), emails: [] });
     expect(m.greetingName).toBe("Oliver Smith Jeweler Inc team");
     expect(m.items.map((i) => i.sku)).toEqual(["B-14W"]);
-    expect(m.undescribedCount).toBe(1);
-    expect(m.moreCount).toBe(1);
+    expect(m.leftOut).toEqual({ noName: 1, outOfStock: 0, hidden: 0 });
+    expect(m.moreCount).toBe(0);
   });
 });
 
@@ -92,6 +92,15 @@ describe("rendering", () => {
   it("rejects unsafe links", () => {
     const m = buildEmailModel({ ...base, customer: customer(), emails: [], reorderUrl: "javascript:alert(1)" });
     expect(renderPreviewHtml(m)).not.toContain("javascript:");
+  });
+
+  it("allows inline images in the preview only, never data: links", () => {
+    const m = buildEmailModel({ ...base, customer: customer(), emails: [], reorderUrl: "data:text/html,<b>x</b>" });
+    m.items[0]!.imageUrl = "data:image/svg+xml;utf8,%3Csvg%3E";
+    m.items[1]!.imageUrl = "data:text/html,<script>";
+    const html = renderPreviewHtml(m);
+    expect(html).toContain('src="data:image/svg+xml;utf8,%3Csvg%3E"');
+    expect(html).not.toContain("data:text/html");
   });
 
   it("produces a Mailchimp template with valid merge tags", () => {

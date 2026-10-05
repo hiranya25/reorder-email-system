@@ -1,4 +1,6 @@
 import { toCsv, reportRowsToCsv } from "./csv";
+import { productCheck, type CatalogIndex } from "./catalog/resolve";
+import { EMPTY_EDITS, type ProductEdits } from "./catalog/types";
 import type { ImportResult } from "./import/types";
 import type { Issue } from "./types";
 
@@ -14,6 +16,9 @@ export interface IssueContext {
   largeAccountProducts: number;
   /** Accounts already approved or excluded; their review issues are resolved. */
   decided?: Set<string>;
+  catalog?: CatalogIndex;
+  edits?: ProductEdits;
+  topN?: number;
 }
 
 /** Everything the Overview lists under "Issues to resolve before sending". */
@@ -27,7 +32,22 @@ export function buildIssues(result: ImportResult, ctx: IssueContext): Issue[] {
   if (!ctx.catalogUploaded) {
     issues.push({ id: "catalog", severity: "blocker", message: `Product catalog not uploaded. No images, product links or prices for the ${n(skuCount)} SKUs.`, action: { label: "Upload catalog", href: "products", kind: "button" } });
   }
-  if (stats.undescribedSkus.length) {
+  const checked = ctx.catalogUploaded && ctx.catalog ? productCheck(customers, ctx.catalog, ctx.edits ?? EMPTY_EDITS, ctx.topN ?? 3) : undefined;
+  if (checked) {
+    // With a catalog, a product only lacks a name if neither the catalog nor an edit names it.
+    const noName = checked.filter((r) => r.problems.includes("no_name"));
+    if (noName.length) {
+      issues.push({ id: "no_description", severity: "blocker", message: `${n(noName.length)} product${noName.length === 1 ? " has" : "s have"} no name in the catalog or sales data, so ${noName.length === 1 ? "it is" : "they are"} left out of emails.`, action: { label: "Fix names", href: "products?filter=no_name", kind: "button" } });
+    }
+    const noImage = checked.filter((r) => r.shownTo > 0 && r.problems.includes("no_image"));
+    if (noImage.length) {
+      issues.push({ id: "no_image", severity: "review", message: `${n(noImage.length)} product${noImage.length === 1 ? "" : "s"} shown in emails ${noImage.length === 1 ? "has" : "have"} no image in the catalog.`, action: { label: "Review", href: "products?filter=no_image", kind: "link" } });
+    }
+    const out = checked.filter((r) => r.problems.includes("out_of_stock"));
+    if (out.length) {
+      issues.push({ id: "out_of_stock", severity: "review", message: `${n(out.length)} purchased product${out.length === 1 ? " is" : "s are"} out of stock with no replacement and will be left out.`, action: { label: "Review", href: "products?filter=out_of_stock", kind: "link" } });
+    }
+  } else if (stats.undescribedSkus.length) {
     issues.push({
       id: "no_description",
       severity: "blocker",

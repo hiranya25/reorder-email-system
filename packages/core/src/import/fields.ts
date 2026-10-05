@@ -14,8 +14,8 @@ export const FIELD_KEYS = [
 ] as const;
 export type FieldKey = (typeof FIELD_KEYS)[number];
 
-export interface FieldDef {
-  key: FieldKey;
+export interface FieldDef<K extends string = FieldKey> {
+  key: K;
   label: string;
   required: boolean;
   help: string;
