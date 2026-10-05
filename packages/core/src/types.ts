@@ -29,6 +29,8 @@ export interface IssueAction {
   href?: string;
   /** Buttons are primary actions; links are "Review"-style deep links. */
   kind: "button" | "link";
+  /** Generated file offered instead of navigation. */
+  download?: { fileName: string; csv: string };
 }
 
 export interface Issue {

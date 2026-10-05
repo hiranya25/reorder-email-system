@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DEMO_SUMMARY } from "./demo";
 import { currentStepNumber, deriveSteps } from "./steps";
+import type { CampaignSummary } from "./types";
+
+const DEMO_SUMMARY: CampaignSummary = {
+  lines: 1240, customers: 210, ready: 172, review: 30, noEmail: 8, units: 1880, skus: 560, styles: 330, reps: 18,
+  categories: [], productsPerCustomer: { one: 76, two: 34, threePlus: 100 }, origin: { labGrown: 0.62, natural: 0.38 },
+};
 
 const base = { decidedAccounts: 0, catalogUploaded: false, approverLabel: "Shruti / Founder" };
 

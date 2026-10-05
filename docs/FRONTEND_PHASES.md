@@ -13,4 +13,8 @@ Email brand stays as the `[YOUR BRAND]` placeholder.
 | F5 Products & recommendations | `claude/frontend-f5-products-recs` | Catalog upload (CSV) and Product check (missing description / image / discontinued, successor, hide); segments and 3-pick Recommendations with per-customer overrides | Blockers clear once a catalog is uploaded and picks are set |
 | F6 Approve, results, settings | `claude/frontend-f6-approve-results` | Approve & lock with confirmation, Mailchimp CSV export, local audit log, Results (empty state until Mailchimp), Settings (generic-inbox list, thresholds, roles view), Playwright e2e | Full flow import → approve → CSV works end to end |
 
+Notes:
+- Excel files are read with `read-excel-file` (.xlsx) and CSVs with `papaparse`. The SheetJS copy on npm is an old version with known security issues, and its own download server isn't reachable from the build environment. Old `.xls` files are rejected with a "save as .xlsx" message.
+- Browser data lives in IndexedDB (falls back to memory when storage is blocked).
+
 The backend (DB, auth, Mailchimp sync) follows these phases, as described in `IMPLEMENTATION_PLAN.md`.
