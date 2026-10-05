@@ -36,7 +36,13 @@ export function deriveSteps(input: StepInputs): StepStatus[] {
     const mappingDone = summary.customers > 0 && input.decidedAccounts >= summary.customers;
     states.mapping = mappingDone
       ? { state: "done", detail: `${formatNumber(summary.customers)} decided` }
-      : { state: "in_progress", detail: `${formatNumber(summary.ready)} of ${formatNumber(summary.customers)} ready` };
+      : {
+          state: "in_progress",
+          detail:
+            input.decidedAccounts > 0
+              ? `${formatNumber(input.decidedAccounts)} of ${formatNumber(summary.customers)} decided`
+              : `${formatNumber(summary.ready)} of ${formatNumber(summary.customers)} ready`,
+        };
     states.products = input.catalogUploaded
       ? { state: mappingDone ? "in_progress" : "not_started", detail: "Catalog uploaded" }
       : { state: "blocked", detail: "Catalog needed" };

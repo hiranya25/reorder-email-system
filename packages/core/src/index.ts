@@ -12,3 +12,4 @@ export * from "./import/normalize";
 export * from "./import/rules";
 export * from "./import/process";
 export * from "./import/types";
+export * from "./mapping";

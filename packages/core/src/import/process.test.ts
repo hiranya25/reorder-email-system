@@ -68,7 +68,7 @@ describe("processSales", () => {
   it("builds issues with downloads", () => {
     const issues = buildIssues(result, { catalogUploaded: false, largeAccountProducts: 20 });
     expect(issues.map((i) => i.id)).toEqual(["catalog", "no_description", "generic", "shared:4|5", "multi:3", "import:missing_id", "import:bad_qty", "import:outside_season", "auto_fixed"]);
-    expect(issues.find((i) => i.id === "shared:4|5")!.message).toBe("Delta and Delta Branch 1 share one email. Merge into a single email?");
+    expect(issues.find((i) => i.id === "shared:4|5")!.message).toBe("Delta and Delta Branch 1 share one email. Each gets its own email unless you exclude one.");
     expect(issues.find((i) => i.id === "no_description")!.action!.download!.csv).toContain("R200-PT,1,1");
     expect(issues.at(-1)!.message).toBe('Removed the "Total" row, combined 1 repeat line for the same customer and product across months, standardized category names.');
   });
@@ -83,5 +83,15 @@ describe("processSales", () => {
     const rows: Row[] = Array.from({ length: 21 }, (_, i) => ["9", "Big", "b@big.com", "October", "Natural", 1, "BAND", `SKU${i}`, "Band", "MA"]);
     expect(run(rows).customers[0]!.large).toBe(true);
     expect(run(rows.slice(0, 20)).customers[0]!.large).toBe(false);
+  });
+});
+
+describe("issues after review", () => {
+  it("drops review items for decided accounts", () => {
+    const H2 = ["Account_id", "Customer Name", "email", "Month", "Qty", "item_id", "style_desc"];
+    const r = processSales([H2, ["2", "Beta", "info@beta.com", "October", 1, "S1", "Studs"]], 0, suggestMapping(H2), opts);
+    const ids = (decided: string[]) => buildIssues(r, { catalogUploaded: true, largeAccountProducts: 20, decided: new Set(decided) }).map((i) => i.id);
+    expect(ids([])).toContain("generic");
+    expect(ids(["2"])).not.toContain("generic");
   });
 });
