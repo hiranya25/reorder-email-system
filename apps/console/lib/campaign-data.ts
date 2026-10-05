@@ -24,6 +24,7 @@ import {
   type StepStatus,
 } from "@reorder/core";
 import { useMemo } from "react";
+import type { Approval, Settings } from "./store";
 import { demoImport } from "./demo-import";
 import { useCampaign, useConsoleStore } from "./store";
 
@@ -45,6 +46,10 @@ export interface CampaignData {
   productsConfirmed: boolean;
   picks: RecommendationPicks;
   segments: SegmentSummary[];
+  settings: Settings;
+  /** Present once approved; the campaign is locked until reopened. */
+  approval?: Approval;
+  locked: boolean;
 }
 
 const APPROVER_LABEL = "Shruti / Founder";
@@ -69,9 +74,21 @@ export function mappingFor(
 }
 
 /** Light version for the campaigns list: no catalog or picks detail. */
-export function stepsFor(importRecord: ImportRecord | undefined, decidedAccounts: number, extra: { catalogUploaded: boolean; productsConfirmed: boolean }): StepStatus[] {
+export function stepsFor(
+  importRecord: ImportRecord | undefined,
+  decidedAccounts: number,
+  extra: { catalogUploaded: boolean; productsConfirmed: boolean; approval?: Approval },
+): StepStatus[] {
   const summary = importRecord ? summarize(importRecord.result) : undefined;
-  return deriveSteps({ summary, decidedAccounts, catalogUploaded: extra.catalogUploaded, productsConfirmed: extra.productsConfirmed, approverLabel: APPROVER_LABEL });
+  return deriveSteps({
+    summary,
+    decidedAccounts,
+    catalogUploaded: extra.catalogUploaded,
+    productsConfirmed: extra.productsConfirmed,
+    approverLabel: APPROVER_LABEL,
+    approvedBy: extra.approval?.by,
+    exported: !!extra.approval?.exportedAt,
+  });
 }
 
 /** Everything a campaign screen needs, derived from the campaign's import and review decisions. */
@@ -87,6 +104,8 @@ export function useCampaignData(id: string): CampaignData | undefined {
   const hidden = useConsoleStore((s) => s.hiddenProducts[id] ?? NO_HIDDEN);
   const confirmed = useConsoleStore((s) => s.productsConfirmed[id]);
   const storedPicks = useConsoleStore((s) => s.picks[id]);
+  const settings = useConsoleStore((s) => s.settings);
+  const approval = useConsoleStore((s) => s.approvals[id]);
   const importRecord = campaign?.isDemo ? demoImport() : stored;
 
   return useMemo(() => {
@@ -113,6 +132,8 @@ export function useCampaignData(id: string): CampaignData | undefined {
       productsConfirmed: !!confirmed,
       recommendations: { filled: segments.filter((s) => s.filled === 3 || s.overridden === s.customers).length, total: segments.length },
       approverLabel: APPROVER_LABEL,
+      approvedBy: approval?.by,
+      exported: !!approval?.exportedAt,
     });
     return {
       campaign,
@@ -129,6 +150,9 @@ export function useCampaignData(id: string): CampaignData | undefined {
       productsConfirmed: !!confirmed,
       picks,
       segments,
+      settings,
+      approval,
+      locked: !!approval,
     };
-  }, [campaign, importRecord, decisions, remembered, rules.largeAccountProducts, catalogRecord, demoCatalogLoaded, productEdits, hidden, confirmed, storedPicks]);
+  }, [campaign, importRecord, decisions, remembered, rules.largeAccountProducts, catalogRecord, demoCatalogLoaded, productEdits, hidden, confirmed, storedPicks, settings, approval]);
 }

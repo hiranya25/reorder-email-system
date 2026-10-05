@@ -26,6 +26,7 @@ import { useMemo, useState } from "react";
 import { useConsoleStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { useCurrentCampaign } from "../console/campaign-shell";
+import { LockBanner } from "../console/lock-banner";
 import { PageHeader } from "../console/page-header";
 import { Button, ButtonLink } from "../ui/button";
 import { Card } from "../ui/card";
@@ -48,7 +49,7 @@ const FILTERS = Object.keys(FILTER_LABELS) as MappingFilter[];
 const PAGE_SIZE = 50;
 
 export function MappingView() {
-  const { campaign, mapping } = useCurrentCampaign();
+  const { campaign, mapping, locked } = useCurrentCampaign();
   const rules = useConsoleStore((s) => s.rules);
   const decide = useConsoleStore((s) => s.decide);
   const router = useRouter();
@@ -206,11 +207,12 @@ export function MappingView() {
         title="Customer mapping"
         subtitle={<span className="block max-w-xl">Confirm which email receives each customer&apos;s reorder email. Nothing is sent until every account is approved or excluded.</span>}
         actions={
-          <Button size="lg" disabled={pendingReady.length === 0} onClick={() => setConfirmAll(true)}>
+          <Button size="lg" disabled={pendingReady.length === 0 || locked} onClick={() => setConfirmAll(true)}>
             Approve all ready
           </Button>
         }
       />
+      <LockBanner />
 
       <Card className="mb-5 py-4">
         <div className="flex flex-wrap items-center justify-between gap-2 text-[14px]">

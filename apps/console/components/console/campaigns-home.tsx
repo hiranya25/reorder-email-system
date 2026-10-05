@@ -14,7 +14,7 @@ import { Modal } from "../ui/modal";
 import { StatusChip } from "../ui/status-chip";
 import { PageHeader } from "./page-header";
 
-function progressFor(c: Campaign, record: ImportRecord | undefined, decided: number, extra: { catalogUploaded: boolean; productsConfirmed: boolean }) {
+function progressFor(c: Campaign, record: ImportRecord | undefined, decided: number, extra: Parameters<typeof stepsFor>[2]) {
   const steps = stepsFor(c.isDemo ? demoImport() : record, decided, extra);
   const n = currentStepNumber(steps);
   const blocked = steps.filter((s) => s.state === "blocked").map((s) => s.label);
@@ -37,6 +37,7 @@ export function CampaignsHome() {
   const hasCatalog = useConsoleStore((s) => !!s.catalog?.products.length);
   const demoCatalogLoaded = useConsoleStore((s) => s.demoCatalogLoaded);
   const productsConfirmed = useConsoleStore((s) => s.productsConfirmed);
+  const approvals = useConsoleStore((s) => s.approvals);
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(defaultSeason);
@@ -72,6 +73,7 @@ export function CampaignsHome() {
               const { n, steps, blocked } = progressFor(c, record, decided, {
                 catalogUploaded: c.isDemo ? demoCatalogLoaded : hasCatalog,
                 productsConfirmed: !!productsConfirmed[c.id],
+                approval: approvals[c.id],
               });
               return (
                 <tr key={c.id} className="hover:bg-canvas/50">

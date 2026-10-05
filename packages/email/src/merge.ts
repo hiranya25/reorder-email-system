@@ -35,5 +35,6 @@ export function mergeFields(m: EmailModel): Record<string, string> {
     f[`REC${n}_IMG`] = pick?.imageUrl ?? "";
     f[`REC${n}_URL`] = pick?.url ?? "";
   }
-  return Object.fromEntries(Object.entries(f).map(([k, v]) => [k, clip(v)]));
+  // Links can't be shortened without breaking them; drop overlong ones instead.
+  return Object.fromEntries(Object.entries(f).map(([k, v]) => [k, /(_URL|_IMG|REORDERURL)$/.test(k) && v.length > MERGE_VALUE_MAX ? "" : clip(v)]));
 }

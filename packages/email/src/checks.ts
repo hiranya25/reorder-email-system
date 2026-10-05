@@ -48,7 +48,7 @@ export function emailChecks(m: EmailModel, ctx: { approved: boolean; htmlBytes: 
   if (picks === 0) checks.push({ level: "warn", text: "New-season picks not chosen yet" });
   else if (picks < 3) checks.push({ level: "warn", text: `Only ${picks} of 3 new-season picks apply (others already bought, out of stock or not chosen)` });
   else checks.push({ level: "ok", text: `3 new-season picks from "${m.segment}"` });
-  if (!m.reorderUrl) checks.push({ level: "warn", text: "Reorder link not set yet (what the button opens is still to be decided)" });
+  if (!m.reorderUrl) checks.push({ level: "warn", text: "Reorder button link not set yet (choose it in Settings)" });
   checks.push(
     ctx.htmlBytes > GMAIL_CLIP_BYTES
       ? { level: "bad", text: `Email is ${Math.round(ctx.htmlBytes / 1024)} KB; Gmail clips above 102 KB` }
