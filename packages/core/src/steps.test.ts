@@ -39,6 +39,8 @@ describe("deriveSteps", () => {
       ["done", "4 groups picked"],
       ["in_progress", "Ready to preview"],
     ]);
+    const approved = deriveSteps({ ...base, summary: DEMO_SUMMARY, decidedAccounts: 210, catalogUploaded: true, productsConfirmed: true, recommendations: { filled: 4, total: 4 }, approvedBy: "Shruti", exported: true });
+    expect(approved.slice(4).map((s) => s.state)).toEqual(["done", "done", "done", "in_progress"]);
     const partial = deriveSteps({ ...base, summary: DEMO_SUMMARY, catalogUploaded: true, recommendations: { filled: 1, total: 4 } });
     expect(partial[3]).toMatchObject({ state: "in_progress", detail: "1 of 4 groups picked" });
   });

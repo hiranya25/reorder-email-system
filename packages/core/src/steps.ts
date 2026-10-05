@@ -23,6 +23,9 @@ export interface StepInputs {
   /** Groups with all 3 picks / total groups. */
   recommendations?: { filled: number; total: number };
   approverLabel: string;
+  /** Set once the reviewer approved and locked the campaign. */
+  approvedBy?: string;
+  exported?: boolean;
 }
 
 /**
@@ -64,6 +67,14 @@ export function deriveSteps(input: StepInputs): StepStatus[] {
     }
   }
   states.approve = { state: "not_started", detail: input.approverLabel };
+  if (input.approvedBy) {
+    states.preview = { state: "done", detail: "Checked" };
+    states.approve = { state: "done", detail: `By ${input.approvedBy}` };
+    states.sync = input.exported ? { state: "done", detail: "CSV exported" } : { state: "in_progress", detail: "Export CSV" };
+    if (input.exported) states.send = { state: "in_progress", detail: "Send in Mailchimp" };
+  } else if (states.preview?.state === "in_progress") {
+    states.approve = { state: "in_progress", detail: input.approverLabel };
+  }
 
   return STEP_KEYS.map((key) => ({
     key,

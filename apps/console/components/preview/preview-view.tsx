@@ -1,6 +1,6 @@
 "use client";
 
-import { buildEmailModel, emailChecks, renderMailchimpTemplate, renderPreviewHtml } from "@reorder/email";
+import { buildEmailModel, emailChecks, renderMailchimpTemplate, renderPreviewHtml, reorderUrlFor } from "@reorder/email";
 import { formatNumber, picksFor, type MappingRow } from "@reorder/core";
 import { AlertTriangle, Check, Download, ExternalLink, Search, XCircle } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
@@ -24,7 +24,7 @@ function sortForPreview(rows: MappingRow[]) {
 }
 
 export function PreviewView() {
-  const { campaign, mapping, catalog, catalogUploaded, edits, picks } = useCurrentCampaign();
+  const { campaign, mapping, catalog, catalogUploaded, edits, picks, settings } = useCurrentCampaign();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -52,11 +52,13 @@ export function PreviewView() {
       catalog,
       edits,
       picks: picksFor(row.customer, picks, catalog, edits),
+      brand: settings.brand,
     });
+    model.reorderUrl = reorderUrlFor(model, settings.reorder);
     const html = renderPreviewHtml(model);
     const bytes = new TextEncoder().encode(html).length;
     return { model, html, checks: emailChecks(model, { approved: row.status === "approved", htmlBytes: bytes, catalogUploaded }) };
-  }, [row, campaign.name, campaign.seasonStart, catalog, edits, picks, catalogUploaded]);
+  }, [row, campaign.name, campaign.seasonStart, catalog, edits, picks, catalogUploaded, settings]);
 
   const crumbs = [{ label: campaign.name, href: `/campaigns/${campaign.id}/overview` }, { label: "Step 5" }];
 

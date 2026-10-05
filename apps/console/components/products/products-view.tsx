@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { useConsoleStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { useCurrentCampaign } from "../console/campaign-shell";
+import { LockBanner } from "../console/lock-banner";
 import { PageHeader } from "../console/page-header";
 import { Button, ButtonLink } from "../ui/button";
 import { Card } from "../ui/card";
@@ -136,6 +137,7 @@ export function ProductsView() {
   return (
     <>
       {header}
+      <LockBanner />
 
       <Card className="mb-5 flex flex-wrap items-center gap-x-6 gap-y-2 py-4 text-[13px]">
         <span>

@@ -5,6 +5,7 @@ import { Plus, Search, Sparkles, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useConsoleStore } from "@/lib/store";
 import { useCurrentCampaign } from "../console/campaign-shell";
+import { LockBanner } from "../console/lock-banner";
 import { PageHeader } from "../console/page-header";
 import { ProductPicker, ProductThumb } from "../products/product-picker";
 import { Button, ButtonLink } from "../ui/button";
@@ -126,6 +127,7 @@ export function RecommendationsView() {
           </Button>
         }
       />
+      <LockBanner />
 
       <Card className="mb-5 py-4">
         <div className="flex flex-wrap items-center justify-between gap-2 text-[14px]">

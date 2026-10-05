@@ -14,6 +14,7 @@ pnpm install
 pnpm dev          # http://localhost:3000
 pnpm test         # unit tests (packages/core)
 pnpm lint && pnpm typecheck && pnpm build
+pnpm --filter @reorder/console e2e   # full campaign flow in Chromium (after build)
 ```
 
 Until the backend exists, uploads are read and stored in your browser only (IndexedDB). The **Holiday 2026 Reorder (demo)** campaign runs a synthetic sample export through the same pipeline; download it from the Import screen to try an upload.

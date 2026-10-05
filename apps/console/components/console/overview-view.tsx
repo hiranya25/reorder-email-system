@@ -1,6 +1,6 @@
 "use client";
 
-import { formatNumber, formatPercent, formatSeasonRange } from "@reorder/core";
+import { currentStepNumber, formatNumber, formatPercent, formatSeasonRange, type StepKey } from "@reorder/core";
 import { Upload } from "lucide-react";
 import { ButtonLink } from "../ui/button";
 import { Card, CardHeader } from "../ui/card";
@@ -11,6 +11,18 @@ import { PageHeader } from "./page-header";
 import { SplitBar } from "./split-bar";
 import { StatCard } from "./stat-card";
 import { StepTracker } from "./step-tracker";
+
+/** Screen and button text for each step's "Continue" action. */
+const NEXT: Record<StepKey, [slug: string, label: string]> = {
+  import: ["import", "import"],
+  mapping: ["mapping", "mapping"],
+  products: ["products", "product check"],
+  recommendations: ["recommendations", "recommendations"],
+  preview: ["preview", "preview"],
+  approve: ["approve", "approval"],
+  sync: ["approve", "Mailchimp sync"],
+  send: ["results", "results"],
+};
 
 function MiniStat({ value, label }: { value: number; label: string }) {
   return (
@@ -24,6 +36,7 @@ function MiniStat({ value, label }: { value: number; label: string }) {
 export function OverviewView() {
   const { campaign, summary, issues, steps } = useCurrentCampaign();
   const base = `/campaigns/${campaign.id}`;
+  const [nextSlug, nextLabel] = NEXT[steps[currentStepNumber(steps) - 1]?.key ?? "mapping"];
 
   return (
     <>
@@ -43,8 +56,8 @@ export function OverviewView() {
               <ButtonLink href={`${base}/import`} variant="secondary" size="lg">
                 Re-import data
               </ButtonLink>
-              <ButtonLink href={`${base}/mapping`} size="lg">
-                Continue to mapping →
+              <ButtonLink href={`${base}/${nextSlug}`} size="lg">
+                Continue to {nextLabel} →
               </ButtonLink>
             </>
           ) : (

@@ -17,6 +17,31 @@ import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import { CURRENT_USER } from "./session";
+import { DEFAULT_REORDER, PLACEHOLDER_BRAND, type Brand, type ReorderSetting } from "@reorder/email";
+
+export interface AuditEntry {
+  id: string;
+  at: string;
+  by: string;
+  campaignId?: string;
+  action: string;
+  detail?: string;
+}
+
+export interface Settings {
+  brand: Brand;
+  reorder: ReorderSetting;
+  /** Team addresses for test sends once Mailchimp is connected. */
+  testEmails: string[];
+}
+
+export interface Approval {
+  at: string;
+  by: string;
+  exportedAt?: string;
+}
+
+const AUDIT_LIMIT = 500;
 
 interface ConsoleState {
   /** Campaigns created in this browser. The demo campaign is always added on top. */
@@ -48,6 +73,16 @@ interface ConsoleState {
   setDisplayName: (scope: "real" | "demo", sku: string, name: string | undefined) => void;
   confirmProducts: (campaignId: string, confirmed: boolean) => void;
   setPicks: (campaignId: string, update: (picks: RecommendationPicks) => RecommendationPicks) => void;
+  settings: Settings;
+  updateSettings: (patch: Partial<Settings>, detail: string) => void;
+  /** Approved (locked) campaigns. While locked, review decisions can't change. */
+  approvals: Record<string, Approval>;
+  approve: (campaignId: string, detail: string) => void;
+  reopen: (campaignId: string) => void;
+  markExported: (campaignId: string, detail: string) => void;
+  audit: AuditEntry[];
+  log: (entry: Omit<AuditEntry, "id" | "at" | "by">) => void;
+  clearAll: () => void;
   createCampaign: (input: Pick<Campaign, "name" | "seasonStart" | "seasonEnd">) => Campaign;
   updateCampaign: (id: string, patch: Partial<Omit<Campaign, "id">>) => void;
   deleteCampaign: (id: string) => void;
@@ -89,25 +124,44 @@ function newId(): string {
     : Math.random().toString(36).slice(2, 10);
 }
 
+function auditEntry(e: Omit<AuditEntry, "id" | "at" | "by">): AuditEntry {
+  return { ...e, id: newId(), at: new Date().toISOString(), by: CURRENT_USER.name };
+}
+
+function withAudit(audit: AuditEntry[], e: Omit<AuditEntry, "id" | "at" | "by">): AuditEntry[] {
+  return [auditEntry(e), ...audit].slice(0, AUDIT_LIMIT);
+}
+
+const INITIAL = {
+  campaigns: [] as Campaign[],
+  imports: {} as Record<string, ImportRecord>,
+  savedMappings: {} as Record<string, NamedMapping>,
+  rules: DEFAULT_RULES,
+  decisions: {} as Record<string, Record<string, Decision>>,
+  remembered: {} as Record<string, RememberedContact>,
+  catalog: undefined as CatalogRecord | undefined,
+  demoCatalogLoaded: false,
+  productEdits: { real: { successor: {}, displayName: {} }, demo: { successor: {}, displayName: {} } } as ConsoleState["productEdits"],
+  hiddenProducts: {} as Record<string, string[]>,
+  productsConfirmed: {} as Record<string, { at: string; by: string }>,
+  picks: {} as Record<string, RecommendationPicks>,
+  settings: { brand: PLACEHOLDER_BRAND, reorder: DEFAULT_REORDER, testEmails: [] } as Settings,
+  approvals: {} as Record<string, Approval>,
+  audit: [] as AuditEntry[],
+};
+
 export const useConsoleStore = create<ConsoleState>()(
   persist(
-    (set) => ({
-      campaigns: [],
-      imports: {},
-      savedMappings: {},
-      rules: DEFAULT_RULES,
-      decisions: {},
-      remembered: {},
-      catalog: undefined,
-      demoCatalogLoaded: false,
-      productEdits: { real: { successor: {}, displayName: {} }, demo: { successor: {}, displayName: {} } },
-      hiddenProducts: {},
-      productsConfirmed: {},
-      picks: {},
-      saveCatalog: (record) => set({ catalog: record }),
+    (set, getState) => {
+      const locked = (campaignId: string) => !!getState().approvals[campaignId];
+      return {
+      ...INITIAL,
+      saveCatalog: (record) =>
+        set((s) => ({ catalog: record, audit: withAudit(s.audit, { action: "Catalog uploaded", detail: `${record.fileName} · ${record.products.length} products` }) })),
       loadDemoCatalog: () => set({ demoCatalogLoaded: true }),
       setHidden: (campaignId, sku, hidden) =>
         set((s) => {
+          if (locked(campaignId)) return {};
           const current = s.hiddenProducts[campaignId] ?? [];
           const next = hidden ? [...new Set([...current, sku])] : current.filter((x) => x !== sku);
           return { hiddenProducts: { ...s.hiddenProducts, [campaignId]: next } };
@@ -128,15 +182,46 @@ export const useConsoleStore = create<ConsoleState>()(
         }),
       confirmProducts: (campaignId, confirmed) =>
         set((s) => {
+          if (locked(campaignId)) return {};
           const next = { ...s.productsConfirmed };
           if (confirmed) next[campaignId] = { at: new Date().toISOString(), by: CURRENT_USER.name };
           else delete next[campaignId];
-          return { productsConfirmed: next };
+          return { productsConfirmed: next, audit: withAudit(s.audit, { campaignId, action: confirmed ? "Product check confirmed" : "Product check reopened" }) };
         }),
       setPicks: (campaignId, update) =>
-        set((s) => ({ picks: { ...s.picks, [campaignId]: update(s.picks[campaignId] ?? { bySegment: {}, byCustomer: {} }) } })),
+        set((s) => (locked(campaignId) ? {} : { picks: { ...s.picks, [campaignId]: update(s.picks[campaignId] ?? { bySegment: {}, byCustomer: {} }) } })),
+      updateSettings: (patch, detail) => set((s) => ({ settings: { ...s.settings, ...patch }, audit: withAudit(s.audit, { action: "Settings changed", detail }) })),
+      approve: (campaignId, detail) =>
+        set((s) => ({
+          approvals: { ...s.approvals, [campaignId]: { at: new Date().toISOString(), by: CURRENT_USER.name } },
+          campaigns: s.campaigns.map((c) => (c.id === campaignId ? { ...c, status: "approved" } : c)),
+          audit: withAudit(s.audit, { campaignId, action: "Campaign approved and locked", detail }),
+        })),
+      reopen: (campaignId) =>
+        set((s) => {
+          const approvals = { ...s.approvals };
+          delete approvals[campaignId];
+          return {
+            approvals,
+            campaigns: s.campaigns.map((c) => (c.id === campaignId ? { ...c, status: "imported" } : c)),
+            audit: withAudit(s.audit, { campaignId, action: "Campaign reopened for changes" }),
+          };
+        }),
+      markExported: (campaignId, detail) =>
+        set((s) => {
+          const a = s.approvals[campaignId];
+          if (!a) return {};
+          return {
+            approvals: { ...s.approvals, [campaignId]: { ...a, exportedAt: new Date().toISOString() } },
+            campaigns: s.campaigns.map((c) => (c.id === campaignId ? { ...c, status: "synced" } : c)),
+            audit: withAudit(s.audit, { campaignId, action: "Mailchimp CSV exported", detail }),
+          };
+        }),
+      log: (e) => set((s) => ({ audit: withAudit(s.audit, e) })),
+      clearAll: () => set({ ...INITIAL }),
       decide: (campaignId, accountIds, status, emailsFor) =>
         set((s) => {
+          if (locked(campaignId)) return {};
           const now = new Date().toISOString();
           const campaignDecisions = { ...(s.decisions[campaignId] ?? {}) };
           const remembered = { ...s.remembered };
@@ -148,7 +233,12 @@ export const useConsoleStore = create<ConsoleState>()(
             if (status === "approved" && emails.length) remembered[id] = { emails, approvedAt: now, campaignId };
             else if (remembered[id]?.campaignId === campaignId) delete remembered[id];
           }
-          return { decisions: { ...s.decisions, [campaignId]: campaignDecisions }, remembered };
+          const verb = { approved: "Approved", excluded: "Excluded", undecided: "Reopened" }[status];
+          const audit =
+            accountIds.length > 1 || status !== "undecided"
+              ? withAudit(s.audit, { campaignId, action: `${verb} ${accountIds.length === 1 ? "account" : `${accountIds.length} accounts`}`, detail: accountIds.length === 1 ? accountIds[0] : undefined })
+              : s.audit;
+          return { decisions: { ...s.decisions, [campaignId]: campaignDecisions }, remembered, audit };
         }),
       createCampaign: (input) => {
         const campaign: Campaign = { ...input, id: newId(), status: "draft", createdAt: new Date().toISOString() };
@@ -171,10 +261,12 @@ export const useConsoleStore = create<ConsoleState>()(
             hiddenProducts: drop(s.hiddenProducts),
             productsConfirmed: drop(s.productsConfirmed),
             picks: drop(s.picks),
+            approvals: drop(s.approvals),
           };
         }),
       saveImport: (campaignId, record, signature, season) =>
-        set((s) => ({
+        set((s) => locked(campaignId) ? {} : ({
+          audit: withAudit(s.audit, { campaignId, action: "Sales data imported", detail: `${record.fileName} · ${record.result.customers.length} customers` }),
           imports: { ...s.imports, [campaignId]: record },
           savedMappings: { ...s.savedMappings, [signature]: record.mapping },
           campaigns: s.campaigns.map((c) =>
@@ -183,10 +275,11 @@ export const useConsoleStore = create<ConsoleState>()(
               : c,
           ),
         })),
-    }),
+      };
+    },
     {
       name: "reorder-console",
-      version: 4,
+      version: 5,
       storage: createJSONStorage(browserStorage),
       skipHydration: true,
       partialize: (s) => ({
@@ -202,22 +295,13 @@ export const useConsoleStore = create<ConsoleState>()(
         hiddenProducts: s.hiddenProducts,
         productsConfirmed: s.productsConfirmed,
         picks: s.picks,
+        settings: s.settings,
+        approvals: s.approvals,
+        audit: s.audit,
       }),
       // Older versions lack the newer keys; fill them in.
       migrate: (persisted) =>
-        ({
-          imports: {},
-          savedMappings: {},
-          rules: DEFAULT_RULES,
-          decisions: {},
-          remembered: {},
-          demoCatalogLoaded: false,
-          productEdits: { real: { successor: {}, displayName: {} }, demo: { successor: {}, displayName: {} } },
-          hiddenProducts: {},
-          productsConfirmed: {},
-          picks: {},
-          ...(persisted as object),
-        }) as ConsoleState,
+        ({ ...INITIAL, ...(persisted as object) }) as ConsoleState,
     },
   ),
 );
