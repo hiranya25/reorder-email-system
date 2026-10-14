@@ -11,7 +11,6 @@ import { Button } from "../ui/button";
 import { Card, CardHeader } from "../ui/card";
 import { Field, Input } from "../ui/field";
 import { Modal } from "../ui/modal";
-import { StatusChip } from "../ui/status-chip";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -24,13 +23,13 @@ function useFlash(): [boolean, () => void] {
   return [on, () => (setOn(true), setTimeout(() => setOn(false), 1800))];
 }
 
-export function SettingsView() {
+export function SettingsView({ usersCard }: { usersCard: React.ReactNode }) {
   const hydrated = useStoreHydrated();
   // Forms read the stored values once loaded; remount them after hydration.
-  return hydrated ? <SettingsForms /> : <p className="text-sm text-ink-muted">Loading settings…</p>;
+  return hydrated ? <SettingsForms usersCard={usersCard} /> : <p className="text-sm text-ink-muted">Loading settings…</p>;
 }
 
-function SettingsForms() {
+function SettingsForms({ usersCard }: { usersCard: React.ReactNode }) {
   const settings = useConsoleStore((s) => s.settings);
   const rules = useConsoleStore((s) => s.rules);
   const audit = useConsoleStore((s) => s.audit);
@@ -180,33 +179,14 @@ function SettingsForms() {
         </Card>
 
         <Card>
-          <CardHeader title="Users and roles" subtitle="Google sign-in limited to the company domain arrives with the backend. Until then everyone using this browser acts as the reviewer." />
-          <table className="w-full text-left text-[13px]">
-            <tbody className="divide-y divide-line">
-              {[
-                ["Project Owner", "Admin", "Everything, including settings and Mailchimp sync"],
-                ["Shruti", "Reviewer", "Approve mappings, choose picks, preview, final approval"],
-                ["Founder", "Viewer", "See campaigns, previews and results"],
-              ].map(([who, role, can]) => (
-                <tr key={who}>
-                  <td className="py-2.5 pr-3 font-semibold">{who}</td>
-                  <td className="py-2.5 pr-3">
-                    <StatusChip tone="neutral">{role}</StatusChip>
-                  </td>
-                  <td className="py-2.5 text-ink-muted">{can}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-
-        <Card>
           <CardHeader title="Data in this browser" subtitle="Imports, decisions and settings are stored only in this browser until the backend is connected." />
           <Button variant="secondary" onClick={() => setClearOpen(true)} className="border-bad-fg/40 text-bad-fg hover:bg-bad-bg">
             Clear all data
           </Button>
         </Card>
       </div>
+
+      <div className="mt-5">{usersCard}</div>
 
       <Card className="mt-5">
         <CardHeader title="Activity log" subtitle="The latest 100 approvals, imports, exports and settings changes." />

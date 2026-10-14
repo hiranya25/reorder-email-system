@@ -16,7 +16,7 @@ import { del, get, set } from "idb-keyval";
 import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
-import { CURRENT_USER } from "./session";
+import { actingUserName } from "./session";
 import { DEFAULT_REORDER, PLACEHOLDER_BRAND, type Brand, type ReorderSetting } from "@reorder/email";
 
 export interface AuditEntry {
@@ -125,7 +125,7 @@ function newId(): string {
 }
 
 function auditEntry(e: Omit<AuditEntry, "id" | "at" | "by">): AuditEntry {
-  return { ...e, id: newId(), at: new Date().toISOString(), by: CURRENT_USER.name };
+  return { ...e, id: newId(), at: new Date().toISOString(), by: actingUserName() };
 }
 
 function withAudit(audit: AuditEntry[], e: Omit<AuditEntry, "id" | "at" | "by">): AuditEntry[] {
@@ -184,7 +184,7 @@ export const useConsoleStore = create<ConsoleState>()(
         set((s) => {
           if (locked(campaignId)) return {};
           const next = { ...s.productsConfirmed };
-          if (confirmed) next[campaignId] = { at: new Date().toISOString(), by: CURRENT_USER.name };
+          if (confirmed) next[campaignId] = { at: new Date().toISOString(), by: actingUserName() };
           else delete next[campaignId];
           return { productsConfirmed: next, audit: withAudit(s.audit, { campaignId, action: confirmed ? "Product check confirmed" : "Product check reopened" }) };
         }),
@@ -193,7 +193,7 @@ export const useConsoleStore = create<ConsoleState>()(
       updateSettings: (patch, detail) => set((s) => ({ settings: { ...s.settings, ...patch }, audit: withAudit(s.audit, { action: "Settings changed", detail }) })),
       approve: (campaignId, detail) =>
         set((s) => ({
-          approvals: { ...s.approvals, [campaignId]: { at: new Date().toISOString(), by: CURRENT_USER.name } },
+          approvals: { ...s.approvals, [campaignId]: { at: new Date().toISOString(), by: actingUserName() } },
           campaigns: s.campaigns.map((c) => (c.id === campaignId ? { ...c, status: "approved" } : c)),
           audit: withAudit(s.audit, { campaignId, action: "Campaign approved and locked", detail }),
         })),
@@ -227,7 +227,7 @@ export const useConsoleStore = create<ConsoleState>()(
           const remembered = { ...s.remembered };
           for (const id of accountIds) {
             const emails = status === "approved" ? emailsFor(id) : [];
-            campaignDecisions[id] = { status, emails, decidedAt: now, decidedBy: CURRENT_USER.name };
+            campaignDecisions[id] = { status, emails, decidedAt: now, decidedBy: actingUserName() };
             // The demo campaign's made-up accounts must never leak into real campaigns.
             if (campaignId === DEMO_CAMPAIGN.id) continue;
             if (status === "approved" && emails.length) remembered[id] = { emails, approvedAt: now, campaignId };

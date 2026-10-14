@@ -16,3 +16,5 @@ test-results/
 !fixtures/**/*.xlsx
 apps/console/test-results/
 apps/console/playwright-report/
+apps/console/e2e/.auth.json
+apps/console/e2e/.totp-used.json

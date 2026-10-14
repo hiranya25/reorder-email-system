@@ -1,12 +1,13 @@
 "use client";
 
-import { Settings } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { StepStatus } from "@reorder/core";
 import { CAMPAIGN_NAV } from "@/lib/nav";
-import { CURRENT_USER } from "@/lib/session";
+import { ROLE_LABELS } from "@/lib/session";
 import { cn } from "@/lib/utils";
+import { useSessionUser } from "../session-provider";
 import { Logo } from "./logo";
 
 function NavLink({ href, active, dim, children }: { href: string; active: boolean; dim?: boolean; children: React.ReactNode }) {
@@ -27,6 +28,7 @@ function NavLink({ href, active, dim, children }: { href: string; active: boolea
 
 export function Sidebar({ campaignId, steps, onNavigate }: { campaignId?: string; steps?: StepStatus[]; onNavigate?: () => void }) {
   const pathname = usePathname();
+  const user = useSessionUser();
   const stepState = (key?: string) => steps?.find((s) => s.key === key)?.state;
 
   return (
@@ -59,15 +61,20 @@ export function Sidebar({ campaignId, steps, onNavigate }: { campaignId?: string
 
       <div className="flex items-center gap-3 border-t border-white/10 px-2 pt-4">
         <span className="flex size-8 items-center justify-center rounded-full bg-gold text-sm font-semibold text-sidebar">
-          {CURRENT_USER.name[0]}
+          {user.name.charAt(0).toUpperCase()}
         </span>
-        <div className="flex-1 leading-tight">
-          <div className="text-sm font-semibold text-white">{CURRENT_USER.name}</div>
-          <div className="text-xs text-sidebar-muted">{CURRENT_USER.role}</div>
+        <div className="min-w-0 flex-1 leading-tight">
+          <div className="truncate text-sm font-semibold text-white">{user.name}</div>
+          <div className="text-xs text-sidebar-muted">{ROLE_LABELS[user.role]}</div>
         </div>
         <Link href="/settings" aria-label="Settings" className="rounded p-1.5 text-sidebar-muted hover:bg-white/5 hover:text-white">
           <Settings size={17} />
         </Link>
+        <form action="/logout" method="post">
+          <button type="submit" aria-label="Sign out" title="Sign out" className="rounded p-1.5 text-sidebar-muted hover:bg-white/5 hover:text-white">
+            <LogOut size={17} />
+          </button>
+        </form>
       </div>
     </div>
   );

@@ -7,6 +7,20 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: reorder
+          POSTGRES_PASSWORD: reorder
+          POSTGRES_DB: reorder_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U reorder"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://reorder:reorder@localhost:5432/reorder_test
+      E2E_DATABASE_URL: postgres://reorder:reorder@localhost:5432/reorder_e2e
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -20,5 +34,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: apps/console/scripts/prepare-standalone.sh
+      - run: PGPASSWORD=reorder psql -h localhost -U reorder -d reorder_test -c "CREATE DATABASE reorder_e2e"
       - run: pnpm --filter @reorder/console exec playwright install --with-deps chromium
       - run: pnpm --filter @reorder/console e2e
