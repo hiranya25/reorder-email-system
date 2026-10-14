@@ -65,7 +65,10 @@ describe("encryption", () => {
     const enc = encrypt("JBSWY3DPEHPK3PXP", SECRET);
     expect(decrypt(enc, SECRET)).toBe("JBSWY3DPEHPK3PXP");
     const [iv, tag, data] = enc.split(".");
-    expect(() => decrypt([iv, tag, data!.slice(0, -2) + "AA"].join("."), SECRET)).toThrow();
+    // Flip one decoded byte so the change is guaranteed (editing base64 text can be a no-op).
+    const bytes = Buffer.from(data!, "base64url");
+    bytes[0] = bytes[0]! ^ 0xff;
+    expect(() => decrypt([iv, tag, bytes.toString("base64url")].join("."), SECRET)).toThrow();
     expect(() => decrypt(enc, "y".repeat(40))).toThrow();
     expect(() => encrypt("x", "short")).toThrow(/32 characters/);
   });
