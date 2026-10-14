@@ -19,6 +19,10 @@ export function setActingUser(user: SessionUser) {
   acting = user;
 }
 
+export function actingUser(): SessionUser | undefined {
+  return acting;
+}
+
 export function actingUserName(): string {
   return acting?.name ?? "Unknown user";
 }

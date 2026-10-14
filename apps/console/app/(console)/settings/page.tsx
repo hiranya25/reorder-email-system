@@ -2,13 +2,19 @@ import { ConsoleShell } from "@/components/console/shell";
 import { SettingsView } from "@/components/settings/settings-view";
 import { UsersCard } from "@/components/settings/users-card";
 import { auth, requireUser } from "@/lib/server/auth";
+import { loadAudit } from "@/lib/server/repo";
 
 export default async function SettingsPage() {
   const me = await requireUser();
-  const [users, invites] = await Promise.all([auth().listUsers(), me.role === "admin" ? auth().listOpenInvites() : Promise.resolve([])]);
+  const [users, invites, audit] = await Promise.all([
+    auth().listUsers(),
+    me.role === "admin" ? auth().listOpenInvites() : Promise.resolve([]),
+    loadAudit({ limit: 100 }),
+  ]);
   return (
     <ConsoleShell>
       <SettingsView
+        audit={audit}
         usersCard={
           <UsersCard
             users={users.map((u) => ({

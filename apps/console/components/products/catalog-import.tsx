@@ -68,12 +68,14 @@ export function CatalogImport({ onDone, onCancel }: { onDone: () => void; onCanc
     }
   };
 
-  const confirm = () => {
-    if (!loaded || !result || result.report.errors.length) return;
+  const [saving, setSaving] = useState(false);
+  const confirm = async () => {
+    if (!loaded || !result || result.report.errors.length || saving) return;
+    setSaving(true);
     const mapping = toNamedMapping(loaded.mapping, headers);
-    saveCatalog({ fileName: loaded.fileName, importedAt: new Date().toISOString(), mapping, products: result.products, report: result.report });
-    useConsoleStore.setState((s) => ({ savedMappings: { ...s.savedMappings, [`catalog:${headerSignature(headers)}`]: mapping } }));
-    onDone();
+    const ok = await saveCatalog({ fileName: loaded.fileName, importedAt: new Date().toISOString(), mapping, products: result.products, report: result.report }, headerSignature(headers));
+    setSaving(false);
+    if (ok) onDone();
   };
 
   if (campaign.isDemo) {
@@ -164,8 +166,8 @@ export function CatalogImport({ onDone, onCancel }: { onDone: () => void; onCanc
               <Button variant="secondary" onClick={() => setLoaded(undefined)}>
                 Choose another file
               </Button>
-              <Button disabled={!result || result.report.errors.length > 0} onClick={confirm}>
-                Use this catalog
+              <Button disabled={!result || result.report.errors.length > 0 || saving} onClick={() => void confirm()}>
+                {saving ? "Saving…" : "Use this catalog"}
               </Button>
             </div>
           </Card>

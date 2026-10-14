@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests --exclude \"e2e/**\" --exclude \"node_modules/**\"",
+    "test": "vitest run",
     "e2e": "playwright test"
   },
   "dependencies": {
@@ -18,7 +18,7 @@
     "@reorder/email": "workspace:*",
     "@tanstack/react-table": "^8.21.3",
     "clsx": "^2.1.1",
-    "idb-keyval": "^6.3.0",
+    "drizzle-orm": "~0.45.4",
     "lucide-react": "^1.52.0",
     "next": "^16.3.8",
     "papaparse": "^5.7.0",

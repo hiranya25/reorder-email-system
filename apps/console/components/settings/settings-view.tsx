@@ -5,6 +5,8 @@ import type { ReorderSetting } from "@reorder/email";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useConsoleStore, useStoreHydrated } from "@/lib/store";
+import type { AuditEntry } from "@/lib/types";
+import { useSessionUser } from "../session-provider";
 import { AuditTable } from "../approve/audit-table";
 import { PageHeader } from "../console/page-header";
 import { Button } from "../ui/button";
@@ -23,16 +25,19 @@ function useFlash(): [boolean, () => void] {
   return [on, () => (setOn(true), setTimeout(() => setOn(false), 1800))];
 }
 
-export function SettingsView({ usersCard }: { usersCard: React.ReactNode }) {
+export function SettingsView({ usersCard, audit }: { usersCard: React.ReactNode; audit: AuditEntry[] }) {
   const hydrated = useStoreHydrated();
   // Forms read the stored values once loaded; remount them after hydration.
-  return hydrated ? <SettingsForms usersCard={usersCard} /> : <p className="text-sm text-ink-muted">Loading settings…</p>;
+  return hydrated ? <SettingsForms usersCard={usersCard} audit={audit} /> : <p className="text-sm text-ink-muted">Loading settings…</p>;
 }
 
-function SettingsForms({ usersCard }: { usersCard: React.ReactNode }) {
+function SettingsForms({ usersCard, audit }: { usersCard: React.ReactNode; audit: AuditEntry[] }) {
   const settings = useConsoleStore((s) => s.settings);
   const rules = useConsoleStore((s) => s.rules);
-  const audit = useConsoleStore((s) => s.audit);
+  const saveRules = useConsoleStore((s) => s.saveRules);
+  const isAdmin = useSessionUser().role === "admin";
+  const [approvalsNeeded, setApprovalsNeeded] = useState(String(settings.requiredApprovals));
+  const [approvalsSaved, flashApprovals] = useFlash();
   const campaigns = useConsoleStore((s) => s.campaigns);
   const updateSettings = useConsoleStore((s) => s.updateSettings);
   const clearAll = useConsoleStore((s) => s.clearAll);
@@ -61,6 +66,8 @@ function SettingsForms({ usersCard }: { usersCard: React.ReactNode }) {
   return (
     <>
       <PageHeader title="Settings" subtitle="Brand, the Reorder button, review rules, the team test list and the activity log." />
+      {!isAdmin && <p className="mb-4 rounded-lg bg-canvas px-4 py-3 text-[13px] text-ink-muted">Only admins can change these settings.</p>}
+      <fieldset disabled={!isAdmin} className="m-0 min-w-0 border-0 p-0">
       <div className="grid items-start gap-5 xl:grid-cols-2">
         <Card>
           <CardHeader title="Brand" subtitle="Shown in the email header and footer." aside={<Saved show={brandSaved} />} />
@@ -68,8 +75,7 @@ function SettingsForms({ usersCard }: { usersCard: React.ReactNode }) {
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              updateSettings({ brand: { brandName: brand.brandName.trim(), companyName: brand.companyName.trim(), address: brand.address.trim() } }, "Brand");
-              flashBrand();
+              void updateSettings({ brand: { brandName: brand.brandName.trim(), companyName: brand.companyName.trim(), address: brand.address.trim() } }, "Brand").then((ok) => ok && flashBrand());
             }}
           >
             <Field label="Brand name (email header)">
@@ -94,8 +100,7 @@ function SettingsForms({ usersCard }: { usersCard: React.ReactNode }) {
             onSubmit={(e) => {
               e.preventDefault();
               const next: ReorderSetting = reorder.mode === "url" ? { mode: "url", template: urlTemplate.trim() } : reorder.mode === "mailto" ? { mode: "mailto", address: mailto.trim().toLowerCase() } : { mode: "none" };
-              updateSettings({ reorder: next }, `Reorder button: ${next.mode}`);
-              flashReorder();
+              void updateSettings({ reorder: next }, `Reorder button: ${next.mode}`).then((ok) => ok && flashReorder());
             }}
           >
             {(
@@ -138,9 +143,7 @@ function SettingsForms({ usersCard }: { usersCard: React.ReactNode }) {
             onSubmit={(e) => {
               e.preventDefault();
               const parts = [...new Set(generic.split(/[\s,;]+/).map((g) => g.trim().toLowerCase().replace(/@.*$/, "")).filter(Boolean))];
-              useConsoleStore.setState(() => ({ rules: { genericLocalParts: parts, largeAccountProducts: largeN } }));
-              useConsoleStore.getState().log({ action: "Settings changed", detail: "Review rules" });
-              flashRules();
+              void saveRules({ genericLocalParts: parts, largeAccountProducts: largeN }).then((ok) => ok && flashRules());
             }}
           >
             <Field label="Generic inbox names (sent to review)" hint="Comma separated, without @: info, sales, office…">
@@ -166,8 +169,7 @@ function SettingsForms({ usersCard }: { usersCard: React.ReactNode }) {
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              updateSettings({ testEmails: testList }, `Test list: ${testList.length} addresses`);
-              flashTests();
+              void updateSettings({ testEmails: testList }, `Test list: ${testList.length} addresses`).then((ok) => ok && flashTests());
             }}
           >
             <textarea className="min-h-[96px] w-full rounded-lg border border-line px-3 py-2 font-mono text-[13px] focus:border-navy focus:outline-none" placeholder={"shruti@yourbrand.com\nfounder@yourbrand.com"} value={tests} onChange={(e) => setTests(e.target.value)} aria-label="Test email addresses" />
@@ -179,12 +181,35 @@ function SettingsForms({ usersCard }: { usersCard: React.ReactNode }) {
         </Card>
 
         <Card>
-          <CardHeader title="Data in this browser" subtitle="Imports, decisions and settings are stored only in this browser until the backend is connected." />
+          <CardHeader title="Final approval" subtitle="How many different people must approve a campaign before it can be exported or sent." aside={<Saved show={approvalsSaved} />} />
+          <form
+            className="flex items-end gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void updateSettings({ requiredApprovals: Number(approvalsNeeded) }, `Approvals needed: ${approvalsNeeded}`).then((ok) => ok && flashApprovals());
+            }}
+          >
+            <Field label="Approvals needed">
+              <select value={approvalsNeeded} onChange={(e) => setApprovalsNeeded(e.target.value)} className="h-10 w-32 rounded-lg border border-line bg-white px-2.5 text-sm">
+                {[1, 2, 3].map((n) => (
+                  <option key={n} value={n}>
+                    {n} {n === 1 ? "person" : "people"}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Button type="submit">Save</Button>
+          </form>
+        </Card>
+
+        <Card>
+          <CardHeader title="Campaign data" subtitle="Deletes every campaign, import, decision, catalog and product edit. Users, sign-in and the activity log are kept." />
           <Button variant="secondary" onClick={() => setClearOpen(true)} className="border-bad-fg/40 text-bad-fg hover:bg-bad-bg">
-            Clear all data
+            Clear all campaign data
           </Button>
         </Card>
       </div>
+      </fieldset>
 
       <div className="mt-5">{usersCard}</div>
 
@@ -193,18 +218,20 @@ function SettingsForms({ usersCard }: { usersCard: React.ReactNode }) {
         <AuditTable entries={audit.slice(0, 100)} showCampaign campaignName={nameFor} />
       </Card>
 
-      <Modal open={clearOpen} onClose={() => setClearOpen(false)} title="Clear all data in this browser?">
-        <p className="text-[14px]">This removes every campaign, import, catalog, decision, setting and the activity log from this browser. It can&apos;t be undone.</p>
+      <Modal open={clearOpen} onClose={() => setClearOpen(false)} title="Clear all campaign data?">
+        <p className="text-[14px]">This permanently deletes every campaign, import, decision, catalog, product edit and remembered email for everyone. Users, sign-in and the activity log are kept. It can&apos;t be undone.</p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setClearOpen(false)}>
             Cancel
           </Button>
           <Button
             className="border-bad-fg bg-bad-fg hover:bg-bad-fg/90"
-            onClick={() => {
-              clearAll();
+            onClick={async () => {
               setClearOpen(false);
-              router.push("/campaigns");
+              if (await clearAll()) {
+                router.push("/campaigns");
+                router.refresh();
+              }
             }}
           >
             Clear everything
