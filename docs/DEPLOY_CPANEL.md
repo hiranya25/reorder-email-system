@@ -2,14 +2,14 @@
 
 The console runs as a **Node.js app** (cPanel "Setup Node.js App") with a **PostgreSQL** database. You need cPanel and SSH access. Expect about 30 minutes the first time; later updates are one command.
 
-**Requirements:** Node.js **20.9 or newer** (22 recommended) in *Setup Node.js App*, PostgreSQL 10 or newer, and a subdomain with SSL.
+**Requirements:** Node.js **22** (20.9 is the minimum) in *Setup Node.js App*, PostgreSQL 10 or newer, and a subdomain with SSL.
 
-Below, `CPUSER` is your cPanel username and `reorder.amipi.com` is the console's address. Replace both.
+Below, `CPUSER` is your cPanel username and `reorder.nobulldiamond.com` is the console's address. Replace both.
 
 ---
 
 ## 1. Subdomain and SSL
-1. cPanel → **Domains** → **Create a New Domain** → `reorder.amipi.com`.
+1. cPanel → **Domains** → **Create a New Domain** → `reorder.nobulldiamond.com`.
 2. cPanel → **SSL/TLS Status** → tick the new domain → **Run AutoSSL**. Wait until it shows a valid certificate.
 
 ## 2. Database
@@ -40,7 +40,7 @@ Create `~/.reorder.env`, readable only by you:
 cat > ~/.reorder.env <<'ENV'
 DATABASE_URL=postgres://CPUSER_reorder:PASSWORD@localhost:5432/CPUSER_reorder
 APP_SECRET=PASTE_OUTPUT_OF_openssl_rand_-base64_48
-APP_URL=https://reorder.amipi.com
+APP_URL=https://reorder.nobulldiamond.com
 ALLOWED_EMAIL_DOMAIN=amipi.com
 ENV
 chmod 600 ~/.reorder.env
@@ -56,7 +56,7 @@ cPanel → **Setup Node.js App** → **Create Application**:
 | Node.js version | highest available, at least 20.9 (22 recommended) |
 | Application mode | Production |
 | Application root | `reorder-email-system/apps/console` |
-| Application URL | `reorder.amipi.com` |
+| Application URL | `reorder.nobulldiamond.com` |
 | Application startup file | `app.js` |
 
 Under **Environment variables**, add the same four values as in `~/.reorder.env` (`DATABASE_URL`, `APP_SECRET`, `APP_URL`, `ALLOWED_EMAIL_DOMAIN`). Click **Create**.
