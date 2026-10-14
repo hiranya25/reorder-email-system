@@ -47,10 +47,10 @@ test("import → map → products → picks → two approvals → export", async
   const base = page.url().replace(/\/import$/, "");
   const sample = await download(page, () => page.getByRole("button", { name: "Download a sample export" }).click(), "sample.csv");
   await page.locator("input[type=file]").setInputFiles(sample);
-  await expect(page.getByText("Check results")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Check results")).toBeVisible();
   await page.getByRole("button", { name: "Confirm import →" }).click();
   await page.waitForURL(/\/overview$/);
-  await expect(page.getByText("Customers last season")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Customers last season")).toBeVisible();
 
   // Mapping: approve ready, approve the rest that have an email, exclude the others
   await page.goto(`${base}/mapping`);
@@ -61,10 +61,12 @@ test("import → map → products → picks → two approvals → export", async
   await page.getByRole("button", { name: /^Approve/ }).nth(1).click();
   await page.getByRole("checkbox", { name: "Select all on this page" }).check();
   await page.getByRole("button", { name: "Exclude", exact: true }).first().click();
-  await expect(page.getByText(/Reviewed (\d+) of \1 accounts/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/Reviewed (\d+) of \1 accounts/)).toBeVisible();
+  // Edits are optimistic; wait for the background saves before reloading.
+  await expect(page.getByText("Saving…")).toHaveCount(0);
   // Saved on the server: still there after a reload.
   await page.reload();
-  await expect(page.getByText(/Reviewed (\d+) of \1 accounts/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/Reviewed (\d+) of \1 accounts/)).toBeVisible();
 
   // Product check: catalog from the template
   await page.goto(`${base}/products`);
@@ -77,7 +79,7 @@ test("import → map → products → picks → two approvals → export", async
   // Recommendations
   await page.goto(`${base}/recommendations`);
   await page.getByRole("button", { name: "Suggest picks" }).click();
-  await expect(page.getByText(/^(\d+) of \1 groups have 3 picks$/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/^(\d+) of \1 groups have 3 picks$/)).toBeVisible();
 
   // Settings: reorder button + brand
   await page.goto("/settings");
@@ -90,7 +92,7 @@ test("import → map → products → picks → two approvals → export", async
 
   // Preview shows the brand and a working reorder link
   await page.goto(`${base}/preview`);
-  const frame = page.frameLocator("iframe");
+  const frame = page.getByRole("main").locator("iframe").contentFrame();
   await expect(frame.getByText("Lumière Wholesale")).toBeVisible();
   await expect(frame.getByRole("link", { name: /Reorder these items/i })).toHaveAttribute("href", /^mailto:orders@lumiere\.example/);
 
@@ -99,7 +101,7 @@ test("import → map → products → picks → two approvals → export", async
   await page.getByRole("button", { name: "Approve (1 of 2)" }).click();
   await page.getByLabel("Type APPROVE to confirm").fill("approve");
   await page.locator("dialog").getByRole("button", { name: "Approve & lock" }).click();
-  await expect(page.getByText(/waiting for 1 more approval from a different person/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/waiting for 1 more approval from a different person/)).toBeVisible();
   await expect(page.getByRole("button", { name: /Give approval 2 of 2/ })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Contacts CSV" })).toBeDisabled();
 
@@ -119,7 +121,7 @@ test("import → map → products → picks → two approvals → export", async
 
   // Admin exports
   await page.reload();
-  await expect(page.getByText("Approved and locked", { exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByText("Approved and locked", { exact: true })).toBeVisible();
   const csvPath = await download(page, () => page.getByRole("button", { name: "Contacts CSV" }).click(), "contacts.csv");
   const csv = readFileSync(csvPath, "utf8").replace(/^﻿/, "").trim().split("\r\n");
   expect(csv[0]).toMatch(/^Email Address,GREETING,COMPANY,CUST_ID,SEASON,.*,Tags$/);
@@ -128,7 +130,7 @@ test("import → map → products → picks → two approvals → export", async
 
   // Locked: mapping can't bulk-approve, overview shows the export
   await page.goto(`${base}/mapping`);
-  await expect(page.getByText(/Changes are locked/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/Changes are locked/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve all ready" })).toBeDisabled();
   await page.goto(`${base}/overview`);
   await expect(page.locator("ol li").nth(6)).toContainText("CSV exported");

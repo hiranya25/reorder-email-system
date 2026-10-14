@@ -11,9 +11,9 @@ test("viewers can look but not change anything", async ({ page }) => {
   await row.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.locator("p", { hasText: "view-only access" })).toBeVisible();
   await page.reload();
-  await expect(page.getByText(/^Reviewed 0 of/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/^Reviewed 0 of/)).toBeVisible();
 
   await page.goto("/settings");
-  await expect(page.getByText("Only admins can change these settings.")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Only admins can change these settings.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Save brand" })).toBeDisabled();
 });
