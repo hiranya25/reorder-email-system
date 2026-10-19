@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext } from "react";
-import { DEMO_CAMPAIGN } from "@reorder/core";
+import { createContext, useContext, useEffect } from "react";
 import { useCampaignData, type CampaignData } from "@/lib/campaign-data";
-import { useStoreHydrated } from "@/lib/store";
+import { useConsoleStoreApi } from "@/lib/store";
+import type { CampaignSnapshot } from "@/lib/types";
 import { ButtonLink } from "../ui/button";
 import { Card } from "../ui/card";
 import { ConsoleShell } from "./shell";
@@ -16,26 +16,24 @@ export function useCurrentCampaign(): CampaignData {
   return data;
 }
 
-export function CampaignShell({ id, children }: { id: string; children: React.ReactNode }) {
-  const data = useCampaignData(id);
-  const hydrated = useStoreHydrated();
+/** Loads one campaign's server data into the store and provides it to the campaign screens. */
+export function CampaignShell({ id, snapshot, children }: { id: string; snapshot?: CampaignSnapshot; children: React.ReactNode }) {
+  const store = useConsoleStoreApi();
+  useEffect(() => {
+    if (snapshot) store.getState().hydrateCampaign(snapshot);
+  }, [store, snapshot]);
+  const data = useCampaignData(id, snapshot);
 
-  if (!data) {
+  if (!data || !snapshot) {
     return (
       <ConsoleShell>
-        {hydrated || id === DEMO_CAMPAIGN.id ? (
-          <Card className="max-w-lg">
-            <h1 className="text-lg font-semibold">Campaign not found</h1>
-            <p className="mt-1 text-sm text-ink-muted">
-              Campaigns are stored in this browser until the backend is connected, so it may have been created on another device.
-            </p>
-            <ButtonLink href="/campaigns" className="mt-4">
-              Back to campaigns
-            </ButtonLink>
-          </Card>
-        ) : (
-          <p className="text-sm text-ink-muted">Loading campaign…</p>
-        )}
+        <Card className="max-w-lg">
+          <h1 className="text-lg font-semibold">Campaign not found</h1>
+          <p className="mt-1 text-sm text-ink-muted">It may have been deleted. Check the campaigns list.</p>
+          <ButtonLink href="/campaigns" className="mt-4">
+            Back to campaigns
+          </ButtonLink>
+        </Card>
       </ConsoleShell>
     );
   }

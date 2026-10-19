@@ -3,7 +3,18 @@ import { createHmac } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const admin = () => JSON.parse(readFileSync(join(__dirname, ".auth.json"), "utf8")) as { email: string; password: string; name: string; secret: string };
+type Person = { email: string; password: string; name: string; secret: string };
+const people = () => JSON.parse(readFileSync(join(__dirname, ".auth.json"), "utf8")) as { admin: Person; reviewer: Person; viewer: Person };
+export const admin = () => people().admin;
+export const reviewer = () => people().reviewer;
+export const viewer = () => people().viewer;
+
+/** After a test changes someone's password, later tests sign in with the new one. */
+export function setPassword(who: "admin" | "reviewer" | "viewer", password: string) {
+  const all = people();
+  all[who].password = password;
+  writeFileSync(join(__dirname, ".auth.json"), JSON.stringify(all));
+}
 
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 function base32(text: string): Buffer {
@@ -58,7 +69,7 @@ export async function freshCode(secret: string, page: Page): Promise<string> {
 
 export async function signIn(page: Page, who = admin()) {
   await page.goto("/login");
-  await page.getByLabel("Work email").fill(who.email);
+  await page.getByLabel("Username or email").fill(who.email);
   await page.getByLabel("Password").fill(who.password);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.waitForURL(/\/login\/verify$/);
@@ -66,4 +77,17 @@ export async function signIn(page: Page, who = admin()) {
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/campaigns$/);
   await expect(page.getByText(who.name, { exact: true })).toBeVisible();
+}
+
+/**
+ * Goes to a page and waits until React has finished streaming it in. Until then a streamed page can
+ * hold a hidden second copy (<div hidden id="S:…">) that trips Playwright's one-match rule.
+ */
+export async function go(page: Page, url: string) {
+  await page.goto(url);
+  await settled(page);
+}
+
+export async function settled(page: Page) {
+  await page.waitForFunction(() => !document.querySelector('div[hidden][id^="S:"]'));
 }

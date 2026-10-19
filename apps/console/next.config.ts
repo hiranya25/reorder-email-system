@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: join(__dirname, "../.."),
   transpilePackages: ["@reorder/core", "@reorder/email", "@reorder/auth", "@reorder/db"],
+  experimental: {
+    // A processed sales import or catalog can be several MB.
+    serverActions: { bodySizeLimit: "25mb" },
+  },
 };
 
 export default nextConfig;

@@ -8,6 +8,27 @@
       "when": 1792004076544,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792006764610,
+      "tag": "0001_campaign_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792423376514,
+      "tag": "0002_sso_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792424457045,
+      "tag": "0003_user_accounts",
+      "breakpoints": true
     }
   ]
 }

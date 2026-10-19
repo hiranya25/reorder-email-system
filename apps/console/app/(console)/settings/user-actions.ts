@@ -7,49 +7,65 @@ import { serverEnv } from "@/lib/server/env";
 
 export interface UserActionState {
   error?: string;
-  /** One-time invite link to hand to the person. */
-  link?: string;
-  email?: string;
+  /** Short confirmation, e.g. "Shreya added." */
+  done?: string;
 }
 
 const ROLES: Role[] = ["admin", "reviewer", "viewer"];
 
-function inviteLink(token: string) {
-  return `${serverEnv().appUrl}/invite/${token}`;
+const field = (form: FormData, name: string) => String(form.get(name) ?? "");
+
+function role(form: FormData): Role | undefined {
+  const r = field(form, "role") as Role;
+  return ROLES.includes(r) ? r : undefined;
 }
 
-export async function inviteUserAction(_: UserActionState, form: FormData): Promise<UserActionState> {
+/** Admin adds someone with their name, username, email, role and (optional) password. */
+export async function createUserAction(_: UserActionState, form: FormData): Promise<UserActionState> {
   const admin = await requireUser(["admin"]);
-  const role = String(form.get("role")) as Role;
-  if (!ROLES.includes(role)) return { error: "Choose a role." };
-  const email = String(form.get("email") ?? "");
+  const r = role(form);
+  if (!r) return { error: "Choose a role." };
+  const password = field(form, "password");
+  if (password !== field(form, "confirm")) return { error: "The two passwords don't match." };
   try {
-    const { token } = await auth().createInvite({ email, role, createdBy: admin.id });
+    const u = await auth().createUser(admin.id, { name: field(form, "name"), username: field(form, "username"), email: field(form, "email"), role: r, password });
     revalidatePath("/settings");
-    return { link: inviteLink(token), email: email.trim().toLowerCase() };
+    const code = serverEnv().authenticatorCode ? "; they set up the authenticator at first sign-in" : "";
+    return { done: `${u.name} added. Share their username and password in person or by Teams${code}.` };
   } catch (e) {
     return { error: formError(e) };
   }
 }
 
-export async function resetUserAction(userId: string): Promise<UserActionState> {
+export async function updateUserAction(userId: string, _: UserActionState, form: FormData): Promise<UserActionState> {
   const admin = await requireUser(["admin"]);
+  const r = role(form);
+  if (!r) return { error: "Choose a role." };
+  const password = field(form, "password");
+  if (password !== field(form, "confirm")) return { error: "The two passwords don't match." };
   try {
-    const { token } = await auth().resetUser(admin.id, userId);
+    const u = await auth().updateUser(admin.id, userId, {
+      name: field(form, "name"),
+      username: field(form, "username"),
+      email: field(form, "email"),
+      role: r,
+      password,
+      resetAuthenticator: form.get("resetAuthenticator") === "on",
+      unlinkAccounts: form.get("unlinkAccounts") === "on",
+    });
     revalidatePath("/settings");
-    return { link: inviteLink(token) };
+    return { done: `${u.name} saved.` };
   } catch (e) {
     return { error: formError(e) };
   }
 }
 
-export async function setRoleAction(userId: string, role: Role): Promise<UserActionState> {
+export async function deleteUserAction(userId: string): Promise<UserActionState> {
   const admin = await requireUser(["admin"]);
-  if (!ROLES.includes(role)) return { error: "Choose a role." };
   try {
-    await auth().setRole(admin.id, userId, role);
+    await auth().deleteUser(admin.id, userId);
     revalidatePath("/settings");
-    return {};
+    return { done: "User deleted." };
   } catch (e) {
     return { error: formError(e) };
   }

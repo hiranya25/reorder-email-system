@@ -4,10 +4,11 @@
   "packageManager": "pnpm@10.28.0",
   "scripts": {
     "dev": "pnpm --filter @reorder/console dev",
+    "preview": "pnpm build && apps/console/scripts/prepare-standalone.sh && node --env-file=apps/console/.env.local apps/console/app.js",
     "build": "pnpm --filter @reorder/console build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
+    "test": "pnpm -r --workspace-concurrency=1 test",
     "db:migrate": "pnpm --filter @reorder/db migrate",
     "create-admin": "pnpm --filter @reorder/console exec tsx scripts/create-admin.ts"
   }

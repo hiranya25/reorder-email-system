@@ -16,13 +16,31 @@ export default defineConfig({
     acceptDownloads: true,
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 1000 } } }],
+  projects: [
+    { name: "chromium", testIgnore: /password-only/, use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 1000 } } },
+    // Same database, second server with the default settings: password only, no 6-digit code.
+    {
+      name: "password-only",
+      testMatch: /password-only\.spec\.ts/,
+      dependencies: ["chromium"],
+      use: { ...devices["Desktop Chrome"], baseURL: `http://localhost:${PORT + 1}` },
+    },
+  ],
   // Runs the same standalone server cPanel runs. Expects `pnpm build` + prepare-standalone first.
-  webServer: {
-    command: "node .next/standalone/apps/console/server.js",
-    url: `http://localhost:${PORT}/login`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-    env: { ...E2E_ENV, PORT: String(PORT), HOSTNAME: "127.0.0.1", NODE_ENV: "production" },
-  },
+  webServer: [
+    {
+      command: "node .next/standalone/apps/console/server.js",
+      url: `http://localhost:${PORT}/login`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      env: { ...E2E_ENV, PORT: String(PORT), HOSTNAME: "127.0.0.1", NODE_ENV: "production" },
+    },
+    {
+      command: "node .next/standalone/apps/console/server.js",
+      url: `http://localhost:${PORT + 1}/login`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      env: { ...E2E_ENV, AUTHENTICATOR_CODE: "off", APP_URL: `http://localhost:${PORT + 1}`, PORT: String(PORT + 1), HOSTNAME: "127.0.0.1", NODE_ENV: "production" },
+    },
+  ],
 });

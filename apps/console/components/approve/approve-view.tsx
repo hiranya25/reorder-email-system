@@ -1,12 +1,14 @@
 "use client";
 
-import { approvalReadiness, canApprove, formatNumber, recommendationsComplete } from "@reorder/core";
-import { buildSendList, campaignTag, mailchimpImportCsv, renderMailchimpTemplate } from "@reorder/email";
+import { canApprove, formatNumber } from "@reorder/core";
+import { campaignTag, mailchimpImportCsv, renderMailchimpTemplate } from "@reorder/email";
 import { AlertTriangle, Check, Download, Lock, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { downloadCsv, downloadText } from "@/lib/download";
+import { readinessFor, sendListFor } from "@/lib/derive";
 import { useConsoleStore } from "@/lib/store";
+import { useSessionUser } from "../session-provider";
 import { useCurrentCampaign } from "../console/campaign-shell";
 import { PageHeader } from "../console/page-header";
 import { Button } from "../ui/button";
@@ -29,39 +31,31 @@ function Stat({ label, value, note }: { label: string; value: number; note?: str
 
 export function ApproveView() {
   const data = useCurrentCampaign();
-  const { campaign, mapping, catalog, catalogUploaded, edits, picks, segments, settings, productsConfirmed, approval } = data;
+  const { campaign, approval, locked, fullyApproved } = data;
+  const me = useSessionUser();
   const approve = useConsoleStore((s) => s.approve);
   const reopen = useConsoleStore((s) => s.reopen);
   const markExported = useConsoleStore((s) => s.markExported);
-  const audit = useConsoleStore((s) => s.audit);
+  const campaignAudit = useConsoleStore((s) => s.campaignAudit[campaign.id]) ?? [];
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [reopenOpen, setReopenOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const list = useMemo(
-    () => buildSendList(mapping, { campaignName: campaign.name, seasonStart: campaign.seasonStart, catalog, edits, picks, brand: settings.brand, reorder: settings.reorder }),
-    [mapping, campaign.name, campaign.seasonStart, catalog, edits, picks, settings],
-  );
+  const list = useMemo(() => sendListFor(data), [data]);
   const skipped = (reason: string) => list.skipped.filter((s) => s.reason === reason).length;
-  const brandSet = !/^\[.*\]$/.test(settings.brand.brandName.trim()) && !/^\[.*\]$/.test(settings.brand.address.trim());
-  const readiness = approvalReadiness({
-    pendingAccounts: skipped("not_decided"),
-    catalogUploaded,
-    productsConfirmed,
-    recommendationsComplete: recommendationsComplete(segments),
-    reorderLinkSet: settings.reorder.mode !== "none",
-    brandSet,
-    emails: list.emails.length,
-  });
+  const readiness = readinessFor(data, list);
   const ready = canApprove(readiness);
   const seasonCode = list.emails[0]?.seasonCode;
   const tag = seasonCode ? campaignTag(seasonCode) : "";
-  const campaignAudit = audit.filter((a) => a.campaignId === campaign.id);
   const base = `/campaigns/${campaign.id}`;
+  const canReview = me.role !== "viewer";
+  const iApproved = approval.approvers.some((a) => a.userId === me.id);
+  const remaining = Math.max(0, approval.required - approval.approvers.length);
 
-  const exportCsv = () => {
+  const exportCsv = async () => {
     downloadCsv(`${seasonCode?.toLowerCase() ?? "reorder"}-mailchimp-contacts.csv`, mailchimpImportCsv(list));
-    markExported(campaign.id, `${list.recipients} addresses · tag ${tag}`);
+    await markExported(campaign.id, `${list.recipients} addresses · tag ${tag}`);
   };
 
   return (
@@ -71,25 +65,43 @@ export function ApproveView() {
         title="Approve & sync"
         subtitle="Final gate before sending. Nothing reaches customers from this console; Mailchimp sends the emails."
         actions={
-          approval ? (
-            <Button variant="secondary" size="lg" onClick={() => setReopenOpen(true)}>
-              Reopen for changes
-            </Button>
-          ) : (
-            <Button size="lg" disabled={!ready} onClick={() => setConfirmOpen(true)} title={ready ? undefined : "Resolve the items marked ✗ first"}>
-              <Lock size={16} /> Approve &amp; lock
-            </Button>
+          canReview && (
+            <>
+              {locked && (
+                <Button variant="secondary" size="lg" onClick={() => setReopenOpen(true)}>
+                  Reopen for changes
+                </Button>
+              )}
+              {!fullyApproved && (
+                <Button
+                  size="lg"
+                  disabled={!ready || iApproved || busy}
+                  onClick={() => setConfirmOpen(true)}
+                  title={iApproved ? "A different person must give the next approval" : ready ? undefined : "Resolve the items marked ✗ first"}
+                >
+                  <Lock size={16} /> {locked ? `Give approval ${approval.approvers.length + 1} of ${approval.required}` : approval.required > 1 ? `Approve (1 of ${approval.required})` : "Approve & lock"}
+                </Button>
+              )}
+            </>
           )
         }
       />
 
-      {approval && (
-        <div className="mb-5 flex items-center gap-3 rounded-xl border border-ok-fg/30 bg-ok-bg px-4 py-3 text-[14px] text-ok-fg">
-          <Lock size={17} />
-          <span>
-            Approved and locked by <strong>{approval.by}</strong> on {new Date(approval.at).toLocaleString()}.
-            {approval.exportedAt && ` Contacts exported ${new Date(approval.exportedAt).toLocaleString()}.`}
-          </span>
+      {locked && (
+        <div className={`mb-5 rounded-xl border px-4 py-3 text-[14px] ${fullyApproved ? "border-ok-fg/30 bg-ok-bg text-ok-fg" : "border-gold/40 bg-cream text-ink"}`}>
+          <div className="flex items-center gap-2 font-semibold">
+            <Lock size={17} />
+            {fullyApproved ? "Approved and locked" : `Locked — waiting for ${remaining} more approval${remaining === 1 ? "" : "s"} from a different person`}
+          </div>
+          <ul className="mt-1.5 space-y-0.5 pl-6 text-[13px]">
+            {approval.approvers.map((a, i) => (
+              <li key={a.userId}>
+                Approval {i + 1}: <strong>{a.name}</strong>, {new Date(a.at).toLocaleString()}
+                {a.userId === me.id && " (you)"}
+              </li>
+            ))}
+            {approval.exportedAt && <li>Contacts exported {new Date(approval.exportedAt).toLocaleString()}</li>}
+          </ul>
         </div>
       )}
 
@@ -150,7 +162,12 @@ export function ApproveView() {
             <span className="min-w-[240px] flex-1">
               Import the contacts CSV into the audience (update existing contacts). It fills every merge field and adds the tag <span className="font-mono text-[13px]">{tag || "—"}</span>.
             </span>
-            <Button size="sm" disabled={!approval} title={approval ? undefined : "Approve first"} onClick={exportCsv}>
+            <Button
+              size="sm"
+              disabled={!fullyApproved || me.role !== "admin"}
+              title={!fullyApproved ? `Needs ${approval.required} approvals first` : me.role !== "admin" ? "Only an admin can export" : undefined}
+              onClick={() => void exportCsv()}
+            >
               <Download size={14} /> Contacts CSV
             </Button>
           </li>
@@ -171,16 +188,21 @@ export function ApproveView() {
           onSubmit={(e) => {
             e.preventDefault();
             if (typed.trim().toUpperCase() !== CONFIRM_WORD) return;
-            approve(campaign.id, `${list.emails.length} emails · ${list.recipients} addresses`);
             setConfirmOpen(false);
             setTyped("");
+            setBusy(true);
+            void approve(campaign.id).finally(() => setBusy(false));
           }}
           className="space-y-4 text-[14px]"
         >
           <p>
             <strong>{formatNumber(list.emails.length)}</strong> customers ({formatNumber(list.recipients)} addresses) will get the reorder email. {formatNumber(list.skipped.length)} accounts are left out.
           </p>
-          <p className="text-ink-muted">Mapping, product and recommendation changes are locked after approval. You can reopen the campaign if something needs to change.</p>
+          <p className="text-ink-muted">
+            {approval.required > 1
+              ? `This is approval ${approval.approvers.length + 1} of ${approval.required}. The campaign locks now; a different person gives the next approval. Reopening clears all approvals.`
+              : "Mapping, product and recommendation changes are locked after approval. You can reopen the campaign if something needs to change."}
+          </p>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-ink-muted">Type {CONFIRM_WORD} to confirm</span>
             <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus aria-label={`Type ${CONFIRM_WORD} to confirm`} />
@@ -198,7 +220,7 @@ export function ApproveView() {
 
       <Modal open={reopenOpen} onClose={() => setReopenOpen(false)} title="Reopen for changes?">
         <p className="text-[14px]">
-          The approval is removed and the campaign can be edited again. If contacts were already imported into Mailchimp, export and import them again after your changes.
+          All approvals are removed and the campaign can be edited again. Everyone has to approve again afterwards. If contacts were already imported into Mailchimp, export and import them again after your changes.
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setReopenOpen(false)}>
@@ -206,7 +228,7 @@ export function ApproveView() {
           </Button>
           <Button
             onClick={() => {
-              reopen(campaign.id);
+              void reopen(campaign.id);
               setReopenOpen(false);
             }}
           >

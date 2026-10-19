@@ -10,7 +10,7 @@ let cached: { db: Db; sql: postgres.Sql } | undefined;
 export function getDb(url = process.env.DATABASE_URL): Db {
   if (cached) return cached.db;
   if (!url) throw new Error("DATABASE_URL is not set");
-  const sql = postgres(url, { max: Number(process.env.DATABASE_POOL_MAX ?? 5), idle_timeout: 30 });
+  const sql = postgres(url, { max: Number(process.env.DATABASE_POOL_MAX ?? 5), idle_timeout: 30, onnotice: () => {} });
   cached = { db: drizzle(sql, { schema }), sql };
   return cached.db;
 }

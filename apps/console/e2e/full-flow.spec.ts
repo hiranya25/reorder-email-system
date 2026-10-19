@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { signIn } from "./helpers";
+import { go, reviewer, settled, signIn } from "./helpers";
 
 /** Runs the whole campaign on the synthetic sample export; no customer data involved. */
 
@@ -31,7 +31,7 @@ function fillCatalog(templatePath: string): string {
   return out;
 }
 
-test("import → map → products → picks → approve → export", async ({ page }) => {
+test("import → map → products → picks → two approvals → export", async ({ page, browser }) => {
   await page.route("https://images.example/**", (r) => r.fulfill({ status: 404 }));
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -39,7 +39,7 @@ test("import → map → products → picks → approve → export", async ({ pa
   await signIn(page);
 
   // New campaign + import the sample export
-  await page.goto("/campaigns");
+  await go(page, "/campaigns");
   await page.getByRole("button", { name: "New campaign" }).click();
   await page.getByLabel("Campaign name").fill("E2E Holiday Reorder");
   await page.getByRole("button", { name: "Create & import data" }).click();
@@ -47,13 +47,13 @@ test("import → map → products → picks → approve → export", async ({ pa
   const base = page.url().replace(/\/import$/, "");
   const sample = await download(page, () => page.getByRole("button", { name: "Download a sample export" }).click(), "sample.csv");
   await page.locator("input[type=file]").setInputFiles(sample);
-  await expect(page.getByText("Check results")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Check results")).toBeVisible();
   await page.getByRole("button", { name: "Confirm import →" }).click();
   await page.waitForURL(/\/overview$/);
-  await expect(page.getByText("Customers last season")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Customers last season")).toBeVisible();
 
   // Mapping: approve ready, approve the rest that have an email, exclude the others
-  await page.goto(`${base}/mapping`);
+  await go(page, `${base}/mapping`);
   await page.getByRole("button", { name: "Approve all ready" }).click();
   await page.locator("dialog").getByRole("button", { name: /^Approve \d+$/ }).click();
   await page.getByLabel("Decision").selectOption("pending");
@@ -61,10 +61,16 @@ test("import → map → products → picks → approve → export", async ({ pa
   await page.getByRole("button", { name: /^Approve/ }).nth(1).click();
   await page.getByRole("checkbox", { name: "Select all on this page" }).check();
   await page.getByRole("button", { name: "Exclude", exact: true }).first().click();
-  await expect(page.getByText(/Reviewed (\d+) of \1 accounts/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/Reviewed (\d+) of \1 accounts/)).toBeVisible();
+  // Edits are optimistic; wait for the background saves before reloading.
+  await expect(page.getByText("Saving…")).toHaveCount(0);
+  // Saved on the server: still there after a reload.
+  await page.reload();
+  await settled(page);
+  await expect(page.getByRole("main").getByText(/Reviewed (\d+) of \1 accounts/)).toBeVisible();
 
   // Product check: catalog from the template
-  await page.goto(`${base}/products`);
+  await go(page, `${base}/products`);
   const template = await download(page, () => page.getByRole("button", { name: "Download template" }).click(), "catalog-template.csv");
   await page.locator("input[type=file]").setInputFiles(fillCatalog(template));
   await page.getByRole("button", { name: "Use this catalog" }).click();
@@ -72,31 +78,64 @@ test("import → map → products → picks → approve → export", async ({ pa
   await expect(page.getByRole("button", { name: "Checked" })).toBeVisible();
 
   // Recommendations
-  await page.goto(`${base}/recommendations`);
+  await go(page, `${base}/recommendations`);
   await page.getByRole("button", { name: "Suggest picks" }).click();
-  await expect(page.getByText(/^(\d+) of \1 groups have 3 picks$/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/^(\d+) of \1 groups have 3 picks$/)).toBeVisible();
 
   // Settings: reorder button + brand
-  await page.goto("/settings");
+  await go(page, "/settings");
   await page.getByLabel("Brand name (email header)").fill("Lumière Wholesale");
   await page.getByLabel("Business address (footer, required for marketing email)").fill("1 Diamond Row, New York, NY");
+  await page.getByLabel("Phone (email header)").fill("1-800-555-0100");
+  await page.getByLabel(/^Logo link/).fill("https://cdn.example/logo.png");
   await page.getByRole("button", { name: "Save brand" }).click();
+  await expect(page.getByRole("main").getByText("Saved").first()).toBeVisible();
+  // Phone and logo are kept on the server.
+  await page.reload();
+  await settled(page);
+  await expect(page.getByLabel("Phone (email header)")).toHaveValue("1-800-555-0100");
+  await expect(page.getByLabel(/^Logo link/)).toHaveValue("https://cdn.example/logo.png");
+  // Back to the text logo, so the preview below shows the brand name.
+  await page.getByLabel(/^Logo link/).fill("");
+  await page.getByRole("button", { name: "Save brand" }).click();
+  await expect(page.getByRole("main").getByText("Saved").first()).toBeVisible();
   await page.getByRole("radio", { name: /An email to the sales team/ }).check();
   await page.getByPlaceholder("orders@yourbrand.com").fill("orders@lumiere.example");
   await page.getByRole("button", { name: "Save reorder button" }).click();
 
   // Preview shows the brand and a working reorder link
-  await page.goto(`${base}/preview`);
-  const frame = page.frameLocator("iframe");
+  await go(page, `${base}/preview`);
+  const frame = page.getByRole("main").locator("iframe").contentFrame();
   await expect(frame.getByText("Lumière Wholesale", { exact: true }).first()).toBeVisible();
   await expect(frame.getByRole("link", { name: /Yes, Go Ahead/i })).toHaveAttribute("href", /^mailto:orders@lumiere\.example/);
 
-  // Approve, lock, export
-  await page.goto(`${base}/approve`);
-  await page.getByRole("button", { name: "Approve & lock" }).click();
-  await page.getByLabel("Type APPROVE to confirm").fill("approve");
+  // First approval (admin): locks the campaign, export still blocked
+  await go(page, `${base}/approve`);
+  await page.getByRole("button", { name: "Approve (1 of 2)" }).click();
+  await page.locator("dialog[open]").getByLabel("Type APPROVE to confirm").fill("approve");
   await page.locator("dialog").getByRole("button", { name: "Approve & lock" }).click();
-  await expect(page.getByText(/Approved and locked by/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/waiting for 1 more approval from a different person/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Give approval 2 of 2/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Contacts CSV" })).toBeDisabled();
+
+  // Second approval (reviewer, own browser) — also proves the data lives on the server.
+  const ctx = await browser.newContext();
+  const r = await ctx.newPage();
+  await signIn(r, reviewer());
+  await go(r, `${base}/approve`);
+  await expect(r.getByText("Approval 1: Owner", { exact: false })).toBeVisible();
+  await r.getByRole("button", { name: "Give approval 2 of 2" }).click();
+  await r.locator("dialog[open]").getByLabel("Type APPROVE to confirm").fill("APPROVE");
+  await r.locator("dialog").getByRole("button", { name: "Approve & lock" }).click();
+  await expect(r.getByText("Approved and locked", { exact: true })).toBeVisible();
+  // Reviewers can't export; that's an admin step.
+  await expect(r.getByRole("button", { name: "Contacts CSV" })).toBeDisabled();
+  await ctx.close();
+
+  // Admin exports
+  await page.reload();
+  await settled(page);
+  await expect(page.getByRole("main").getByText("Approved and locked", { exact: true })).toBeVisible();
   const csvPath = await download(page, () => page.getByRole("button", { name: "Contacts CSV" }).click(), "contacts.csv");
   const csv = readFileSync(csvPath, "utf8").replace(/^﻿/, "").trim().split("\r\n");
   expect(csv[0]).toMatch(/^Email Address,GREETING,COMPANY,CUST_ID,SEASON,.*,Tags$/);
@@ -104,10 +143,10 @@ test("import → map → products → picks → approve → export", async ({ pa
   expect(csv[1]).toMatch(/,reorder-HOLIDAY-2025$/);
 
   // Locked: mapping can't bulk-approve, overview shows the export
-  await page.goto(`${base}/mapping`);
-  await expect(page.getByText(/Changes are locked/)).toBeVisible();
+  await go(page, `${base}/mapping`);
+  await expect(page.getByRole("main").getByText(/Changes are locked/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve all ready" })).toBeDisabled();
-  await page.goto(`${base}/overview`);
+  await go(page, `${base}/overview`);
   await expect(page.locator("ol li").nth(6)).toContainText("CSV exported");
 
   expect(errors).toEqual([]);

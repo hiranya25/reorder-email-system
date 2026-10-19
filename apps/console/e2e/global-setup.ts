@@ -12,4 +12,16 @@ export const E2E_ENV = {
   APP_SECRET: "e2e-only-secret-that-is-long-enough-1234567890",
   APP_URL: "http://localhost:3200",
   ALLOWED_EMAIL_DOMAIN: "amipi.com",
+  // Placeholder keys: the buttons and redirects are tested, never a real provider.
+  MICROSOFT_CLIENT_ID: "e2e-microsoft-client",
+  MICROSOFT_CLIENT_SECRET: "e2e-microsoft-secret",
+  MICROSOFT_TENANT_ID: "11111111-2222-3333-4444-555555555555",
+  GOOGLE_CLIENT_ID: "e2e-google-client",
+  GOOGLE_CLIENT_SECRET: "e2e-google-secret",
+  // Keep password sign-in for the other tests.
+  PASSWORD_LOGIN: "on",
+  // The full flow with the 6-digit code; the password-only path is covered by the auth unit tests.
+  AUTHENTICATOR_CODE: "on",
+  // "Forgot password" emails land here instead of being sent.
+  MAIL_OUTBOX_FILE: join(__dirname, ".outbox.jsonl"),
 };
