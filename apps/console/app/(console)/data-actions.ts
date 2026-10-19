@@ -170,7 +170,16 @@ export async function updateSettingsAction(patch: Partial<Settings>, detail: str
     const next: Settings = { ...current };
     if (patch.brand) {
       const b = patch.brand;
-      next.brand = { brandName: String(b.brandName ?? "").slice(0, 40), companyName: String(b.companyName ?? "").slice(0, 80), address: String(b.address ?? "").slice(0, 160) };
+      const phone = String(b.phone ?? "").trim().slice(0, 30);
+      const logoUrl = String(b.logoUrl ?? "").trim();
+      if (logoUrl && (!/^https:\/\/\S+$/i.test(logoUrl) || logoUrl.length > 255)) bad("The logo link must be a public https:// address.");
+      next.brand = {
+        brandName: String(b.brandName ?? "").slice(0, 40),
+        companyName: String(b.companyName ?? "").slice(0, 80),
+        address: String(b.address ?? "").slice(0, 160),
+        ...(phone ? { phone } : {}),
+        ...(logoUrl ? { logoUrl } : {}),
+      };
     }
     if (patch.reorder) {
       const r = patch.reorder;

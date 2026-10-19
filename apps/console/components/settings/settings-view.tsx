@@ -75,7 +75,18 @@ function SettingsForms({ usersCard, audit }: { usersCard: React.ReactNode; audit
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              void updateSettings({ brand: { brandName: brand.brandName.trim(), companyName: brand.companyName.trim(), address: brand.address.trim() } }, "Brand").then((ok) => ok && flashBrand());
+              void updateSettings(
+                {
+                  brand: {
+                    brandName: brand.brandName.trim(),
+                    companyName: brand.companyName.trim(),
+                    address: brand.address.trim(),
+                    phone: brand.phone?.trim() || undefined,
+                    logoUrl: brand.logoUrl?.trim() || undefined,
+                  },
+                },
+                "Brand",
+              ).then((ok) => ok && flashBrand());
             }}
           >
             <Field label="Brand name (email header)">
@@ -87,6 +98,12 @@ function SettingsForms({ usersCard, audit }: { usersCard: React.ReactNode; audit
             <Field label="Business address (footer, required for marketing email)">
               <Input value={brand.address} onChange={(e) => setBrand({ ...brand, address: e.target.value })} maxLength={160} />
             </Field>
+            <Field label="Phone (email header)">
+              <Input value={brand.phone ?? ""} onChange={(e) => setBrand({ ...brand, phone: e.target.value })} maxLength={30} placeholder="1-800-530-2647" />
+            </Field>
+            <Field label="Logo link (public https image, e.g. from Mailchimp's Content Studio)">
+              <Input value={brand.logoUrl ?? ""} onChange={(e) => setBrand({ ...brand, logoUrl: e.target.value })} maxLength={255} placeholder="https://mcusercontent.com/…/amipi-logo.png" />
+            </Field>
             <Button type="submit" disabled={!brand.brandName.trim() || !brand.address.trim()}>
               Save brand
             </Button>
@@ -94,7 +111,7 @@ function SettingsForms({ usersCard, audit }: { usersCard: React.ReactNode; audit
         </Card>
 
         <Card>
-          <CardHeader title="Reorder button" subtitle="What REORDER THESE ITEMS opens. Campaigns can't be approved until this is set." aside={<Saved show={reorderSaved} />} />
+          <CardHeader title="Reorder button" subtitle="What the Yes, Go Ahead button opens. Campaigns can't be approved until this is set." aside={<Saved show={reorderSaved} />} />
           <form
             className="space-y-3 text-[14px]"
             onSubmit={(e) => {

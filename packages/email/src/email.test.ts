@@ -115,6 +115,29 @@ describe("rendering", () => {
     expect((html.match(/\*\|END:IF\|\*/g) ?? []).length).toBe(opens);
   });
 
+  it("follows the AMIPI layout", () => {
+    const m = buildEmailModel({ ...base, customer: customer(), emails: [], reorderUrl: "https://amipi.example/cart?c=2740" });
+    const html = renderPreviewHtml(m);
+    expect(html).toContain("Last holiday season, you chose some beautiful pieces");
+    expect(html).toContain("1-800-530-2647");
+    expect(html).toContain('href="tel:18005302647"');
+    expect(html).toContain("Your favorite diamond guys!");
+    expect(html).toContain("Would you like us to place a reorder for you?");
+    expect(html).toMatch(/href="https:\/\/amipi\.example\/cart\?c=2740"[^>]*>&#128722; Yes, Go Ahead/);
+    expect(html).toContain("Your Diamond Concierge @AMIPI");
+    expect(html).toContain("Jyoti");
+    const withLogo = renderPreviewHtml({ ...m, brand: { ...m.brand, logoUrl: "https://cdn.example/logo.png" } });
+    expect(withLogo).toContain('<img src="https://cdn.example/logo.png"');
+    expect(withLogo).not.toContain("Your favorite diamond guys!");
+    expect(renderPreviewHtml({ ...m, brand: { ...m.brand, logoUrl: "javascript:alert(1)" } })).not.toContain("javascript:");
+  });
+
+  it("signs with the rep in Mailchimp, or the sales team", () => {
+    const html = renderMailchimpTemplate(buildEmailModel({ ...base, customer: customer(), emails: [] }));
+    expect(html).toContain("*|IF:REPNAME|**|REPNAME|**|ELSE:|*AMIPI Sales Team*|END:IF|*");
+    expect(html).toContain("*|IF:REC1_NAME|*");
+  });
+
   it("stays well under Gmail's clipping limit", () => {
     const html = renderPreviewHtml(buildEmailModel({ ...base, customer: customer(), emails: [] }));
     expect(new TextEncoder().encode(html).length).toBeLessThan(GMAIL_CLIP_BYTES / 4);

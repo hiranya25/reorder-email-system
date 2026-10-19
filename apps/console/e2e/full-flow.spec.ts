@@ -85,7 +85,18 @@ test("import → map → products → picks → two approvals → export", async
   await page.goto("/settings");
   await page.getByLabel("Brand name (email header)").fill("Lumière Wholesale");
   await page.getByLabel("Business address (footer, required for marketing email)").fill("1 Diamond Row, New York, NY");
+  await page.getByLabel("Phone (email header)").fill("1-800-555-0100");
+  await page.getByLabel(/^Logo link/).fill("https://cdn.example/logo.png");
   await page.getByRole("button", { name: "Save brand" }).click();
+  await expect(page.getByRole("main").getByText("Saved").first()).toBeVisible();
+  // Phone and logo are kept on the server.
+  await page.reload();
+  await expect(page.getByLabel("Phone (email header)")).toHaveValue("1-800-555-0100");
+  await expect(page.getByLabel(/^Logo link/)).toHaveValue("https://cdn.example/logo.png");
+  // Back to the text logo, so the preview below shows the brand name.
+  await page.getByLabel(/^Logo link/).fill("");
+  await page.getByRole("button", { name: "Save brand" }).click();
+  await expect(page.getByRole("main").getByText("Saved").first()).toBeVisible();
   await page.getByRole("radio", { name: /An email to the sales team/ }).check();
   await page.getByPlaceholder("orders@yourbrand.com").fill("orders@lumiere.example");
   await page.getByRole("button", { name: "Save reorder button" }).click();
@@ -93,8 +104,8 @@ test("import → map → products → picks → two approvals → export", async
   // Preview shows the brand and a working reorder link
   await page.goto(`${base}/preview`);
   const frame = page.getByRole("main").locator("iframe").contentFrame();
-  await expect(frame.getByText("Lumière Wholesale")).toBeVisible();
-  await expect(frame.getByRole("link", { name: /Reorder these items/i })).toHaveAttribute("href", /^mailto:orders@lumiere\.example/);
+  await expect(frame.getByText("Lumière Wholesale", { exact: true }).first()).toBeVisible();
+  await expect(frame.getByRole("link", { name: /Yes, Go Ahead/i })).toHaveAttribute("href", /^mailto:orders@lumiere\.example/);
 
   // First approval (admin): locks the campaign, export still blocked
   await page.goto(`${base}/approve`);
