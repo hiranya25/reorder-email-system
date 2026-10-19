@@ -5,12 +5,18 @@ export interface Brand {
   brandName: string;
   companyName: string;
   address: string;
+  /** Public https link to the header logo. Without it the header shows a text wordmark. */
+  logoUrl?: string;
+  /** Shown in the header, e.g. "1-800-530-2647". */
+  phone?: string;
 }
 
+/** AMIPI defaults; the business address still has to be filled in before approval. */
 export const PLACEHOLDER_BRAND: Brand = {
-  brandName: "[YOUR BRAND]",
-  companyName: "[Company name]",
+  brandName: "AMIPI",
+  companyName: "AMIPI Inc.",
   address: "[Business address]",
+  phone: "1-800-530-2647",
 };
 
 export interface EmailItem {
@@ -91,7 +97,6 @@ export function buildEmailModel(input: BuildEmailInput): EmailModel {
   const to = input.emails.length ? input.emails : c.emails;
   const first = to.map(firstNameFromEmail).find(Boolean);
   const seasonWord = seasonWordFrom(input.campaignName);
-  const Season = seasonWord.charAt(0).toUpperCase() + seasonWord.slice(1);
   const edits = input.edits ?? EMPTY_EDITS;
   const resolved = resolveItems(c, input.catalog ?? new Map(), edits);
   const included = resolved.filter((r) => !r.excluded);
@@ -107,7 +112,7 @@ export function buildEmailModel(input: BuildEmailInput): EmailModel {
     preheader: `${shown.length === 1 ? "Your bestseller" : `Your ${shown.length} bestsellers`} from last ${seasonWord} season, ready to reorder in one click.`,
     greetingName: first ?? `${c.name} team`,
     greetingFromEmail: !!first,
-    intro: `${Season} season is here. These pieces sold for you last year, so here they are again, ready to restock in a click.`,
+    intro: `Last ${seasonWord} season, you chose some beautiful pieces from us that your customers loved, and we're thrilled to help you bring them back! This year, it's time to restock these ${seasonWord} best-sellers and keep that sparkle going strong.`,
     seasonWord,
     seasonCode: seasonCodeFrom(input.campaignName, input.seasonStart),
     items: shown.map((r) => ({
