@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC = ["/login", "/invite/"];
+const PUBLIC = ["/login", "/invite/", "/auth/"];
 
 /**
  * Fast first gate: no session cookie means straight to sign-in.

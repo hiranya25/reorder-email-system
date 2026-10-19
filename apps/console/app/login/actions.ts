@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { encrypt } from "@reorder/auth";
-import { auth, clearCookie, formError, PENDING_COOKIE, RECOVERY_COOKIE, requestMeta, SESSION_COOKIE, setCookie } from "@/lib/server/auth";
+import { assertPasswordLogin, auth, clearCookie, formError, PENDING_COOKIE, RECOVERY_COOKIE, requestMeta, SESSION_COOKIE, SESSION_SECONDS, setCookie } from "@/lib/server/auth";
 import { serverEnv } from "@/lib/server/env";
 
 export interface FormState {
@@ -14,11 +14,11 @@ export interface FormState {
 }
 
 const PENDING_SECONDS = 10 * 60;
-const SESSION_SECONDS = 7 * 24 * 60 * 60;
 
 export async function loginAction(_: FormState, form: FormData): Promise<FormState> {
   const email = String(form.get("email") ?? "");
   try {
+    assertPasswordLogin();
     const { sessionToken } = await auth().login(email, String(form.get("password") ?? ""), await requestMeta());
     await setCookie(PENDING_COOKIE, sessionToken, PENDING_SECONDS);
   } catch (e) {
@@ -33,6 +33,7 @@ async function pendingToken(): Promise<string> {
 
 export async function verifyCodeAction(_: FormState, form: FormData): Promise<FormState> {
   try {
+    assertPasswordLogin();
     const { sessionToken } = await auth().verifyLogin(await pendingToken(), String(form.get("code") ?? ""), await requestMeta());
     await setCookie(SESSION_COOKIE, sessionToken, SESSION_SECONDS);
     await clearCookie(PENDING_COOKIE);
@@ -48,6 +49,7 @@ export async function verifyCodeAction(_: FormState, form: FormData): Promise<Fo
  */
 export async function confirmSetupAction(_: FormState, form: FormData): Promise<FormState> {
   try {
+    assertPasswordLogin();
     const { sessionToken, recoveryCodes } = await auth().confirmTotpSetup(await pendingToken(), String(form.get("code") ?? ""), await requestMeta());
     await setCookie(SESSION_COOKIE, sessionToken, SESSION_SECONDS);
     await setCookie(RECOVERY_COOKIE, encrypt(JSON.stringify(recoveryCodes), serverEnv().appSecret), 10 * 60);
@@ -68,6 +70,7 @@ export async function acceptInviteAction(token: string, _: FormState, form: Form
   const name = String(form.get("name") ?? "");
   if (password !== String(form.get("confirm") ?? "")) return { error: "The two passwords don't match.", name };
   try {
+    assertPasswordLogin();
     const { sessionToken } = await auth().acceptInvite(token, { name, password }, await requestMeta());
     await setCookie(PENDING_COOKIE, sessionToken, PENDING_SECONDS);
   } catch (e) {

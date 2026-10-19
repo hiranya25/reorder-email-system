@@ -127,4 +127,50 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("AuthService (PostgreSQL)", (
     expect(users.map((u) => u.email).sort()).toEqual(["g@amipi.com", "owner@amipi.com"]);
     expect(await auth.hasActiveAdmin()).toBe(true);
   });
+
+  describe("Sign in with Microsoft / Google", () => {
+    const ms = (over: Partial<{ subject: string; email: string; name: string }> = {}) => ({ provider: "microsoft" as const, subject: "oid-1", email: "Shreya@amipi.com", name: "Shreya Patel", ...over });
+
+    it("lets invited people in and ties their account on first sign-in", async () => {
+      await expect(auth.ssoLogin(ms())).rejects.toMatchObject({ code: "not_invited" });
+      await auth.createInvite({ email: "shreya@amipi.com", role: "reviewer", createdBy: null });
+      const { sessionToken } = await auth.ssoLogin(ms());
+      expect(await auth.getSession(sessionToken)).toMatchObject({ email: "shreya@amipi.com", name: "Shreya Patel", role: "reviewer", signInMethods: ["microsoft"] });
+      // The invite is used up; signing in again works without it.
+      expect(await auth.getSession((await auth.ssoLogin(ms())).sessionToken)).toBeDefined();
+      // Google can be added for the same person.
+      await auth.ssoLogin({ provider: "google", subject: "g-1", email: "shreya@amipi.com", name: "" });
+      expect((await auth.listUsers())[0]!.signInMethods).toEqual(["microsoft", "google"]);
+    });
+
+    it("refuses a different account with the same email, other domains and disabled users", async () => {
+      await auth.createInvite({ email: "shreya@amipi.com", role: "reviewer", createdBy: null });
+      await auth.ssoLogin(ms());
+      await expect(auth.ssoLogin(ms({ subject: "oid-2" }))).rejects.toMatchObject({ code: "account_mismatch" });
+      await expect(auth.ssoLogin(ms({ email: "other@amipi.com" }))).rejects.toMatchObject({ code: "account_mismatch" });
+      await expect(auth.ssoLogin(ms({ email: "shreya@gmail.com", subject: "x" }))).rejects.toMatchObject({ code: "domain_not_allowed" });
+      const [u] = await auth.listUsers();
+      await auth.createInvite({ email: "admin@amipi.com", role: "admin", createdBy: null });
+      await auth.ssoLogin({ provider: "google", subject: "g-admin", email: "admin@amipi.com", name: "Admin" });
+      await auth.setDisabled(u!.id, u!.id, true);
+      await expect(auth.ssoLogin(ms())).rejects.toMatchObject({ code: "invalid_credentials" });
+    });
+
+    it("counts single-sign-on admins and unlinks accounts on reset", async () => {
+      expect(await auth.hasActiveAdmin()).toBe(false);
+      await auth.createInvite({ email: "owner@amipi.com", role: "admin", createdBy: null });
+      await auth.ssoLogin(ms({ email: "owner@amipi.com", subject: "oid-owner" }));
+      expect(await auth.hasActiveAdmin()).toBe(true);
+      const [owner] = await auth.listUsers();
+      await expect(auth.setRole(owner!.id, owner!.id, "viewer")).rejects.toMatchObject({ code: "last_admin" });
+
+      await auth.createInvite({ email: "shreya@amipi.com", role: "reviewer", createdBy: owner!.id });
+      await auth.ssoLogin(ms());
+      const shreya = (await auth.listUsers()).find((u) => u.email === "shreya@amipi.com")!;
+      await auth.resetUser(owner!.id, shreya.id);
+      // A new Microsoft account can now be tied, because the reset sent a fresh invite.
+      const { sessionToken } = await auth.ssoLogin(ms({ subject: "oid-new" }));
+      expect(await auth.getSession(sessionToken)).toMatchObject({ email: "shreya@amipi.com", role: "reviewer" });
+    });
+  });
 });

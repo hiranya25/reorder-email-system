@@ -19,6 +19,21 @@ export interface UserRow {
   disabled: boolean;
   pendingInvite: boolean;
   lastLoginAt?: string;
+  /** e.g. ["Microsoft"], ["Google", "Password"]. */
+  signInMethods: string[];
+}
+
+/** Which sign-in options this server offers, for the help text. */
+export interface SignInOptions {
+  providers: string[];
+  password: boolean;
+  domain: string;
+}
+
+function describeOptions(o: SignInOptions): string {
+  const ways = [...o.providers.map((p) => `Sign in with ${p}`), ...(o.password ? ["email + password + an authenticator code"] : [])];
+  const list = ways.length > 1 ? `${ways.slice(0, -1).join(", ")} or ${ways.at(-1)}` : (ways[0] ?? "not set up yet");
+  return `Sign-in: ${list}. Only invited @${o.domain} addresses can get in.`;
 }
 
 export interface InviteRow {
@@ -57,7 +72,7 @@ function LinkBox({ link, note }: { link: string; note: string }) {
   );
 }
 
-export function UsersCard({ users, invites }: { users: UserRow[]; invites: InviteRow[] }) {
+export function UsersCard({ users, invites, options }: { users: UserRow[]; invites: InviteRow[]; options: SignInOptions }) {
   const me = useSessionUser();
   const isAdmin = me.role === "admin";
   const [inviteState, inviteAction, inviting] = useActionState(inviteUserAction, {} as UserActionState);
@@ -73,7 +88,7 @@ export function UsersCard({ users, invites }: { users: UserRow[]; invites: Invit
 
   return (
     <Card>
-      <CardHeader title="Users and roles" subtitle="Sign-in is email + password + a code from an authenticator app. Only @amipi.com addresses can be invited." />
+      <CardHeader title="Users and roles" subtitle={describeOptions(options)} />
 
       {isAdmin && (
         <form action={inviteAction} className="mb-5 grid gap-3 rounded-lg bg-canvas p-3 sm:grid-cols-[1fr_150px_auto] sm:items-end">
@@ -100,7 +115,14 @@ export function UsersCard({ users, invites }: { users: UserRow[]; invites: Invit
       {rowResult.error && <p className="mb-3 rounded-lg bg-bad-bg px-3 py-2 text-[13px] text-bad-fg">{rowResult.error}</p>}
       {rowResult.link && (
         <div className="mb-3">
-          <LinkBox link={rowResult.link} note="Sign-in reset. Send this new link so they can choose a password and set up their authenticator again." />
+          <LinkBox
+            link={rowResult.link}
+            note={
+              options.providers.length
+                ? `Sign-in reset. Send this new link; they continue with their ${options.providers.join(" or ")} account again.`
+                : "Sign-in reset. Send this new link so they can choose a password and set up their authenticator again."
+            }
+          />
         </div>
       )}
 
@@ -147,7 +169,9 @@ export function UsersCard({ users, invites }: { users: UserRow[]; invites: Invit
                   ) : u.pendingInvite ? (
                     <StatusChip tone="warn">Invite not accepted</StatusChip>
                   ) : (
-                    <span className="text-[12px] text-ink-muted">{u.lastLoginAt ? `Last sign-in ${new Date(u.lastLoginAt).toLocaleDateString()}` : "Active"}</span>
+                    <span className="text-[12px] text-ink-muted">
+                      {[u.signInMethods.join(" + "), u.lastLoginAt ? `last sign-in ${new Date(u.lastLoginAt).toLocaleDateString()}` : "Active"].filter(Boolean).join(" · ")}
+                    </span>
                   )}
                 </td>
                 {isAdmin && (
@@ -183,7 +207,9 @@ export function UsersCard({ users, invites }: { users: UserRow[]; invites: Invit
       {!isAdmin && <p className="mt-3 text-[12px] text-ink-muted">Ask an admin to add people or change access.</p>}
 
       <Modal open={!!resetFor} onClose={() => setResetFor(undefined)} title={`Reset sign-in for ${resetFor?.name}?`}>
-        <p className="text-[14px]">Their password, authenticator and recovery codes stop working right away, and they&apos;re signed out everywhere. You&apos;ll get a new invite link to send them.</p>
+        <p className="text-[14px]">
+          Their linked Microsoft or Google account, password, authenticator and recovery codes stop working right away, and they&apos;re signed out everywhere. You&apos;ll get a new invite link to send them.
+        </p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setResetFor(undefined)}>
             Cancel

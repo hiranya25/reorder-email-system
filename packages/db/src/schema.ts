@@ -7,7 +7,10 @@ export const roleEnum = pgEnum("role", ["admin", "reviewer", "viewer"]);
 const id = () => uuid("id").primaryKey().$defaultFn(() => randomUUID());
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
-/** Console users. Sign-in is email + password + authenticator code (TOTP). */
+/**
+ * Console users. Sign-in is "Sign in with Microsoft" or "Sign in with Google", or, where turned
+ * on, email + password + authenticator code (TOTP).
+ */
 export const users = pgTable(
   "users",
   {
@@ -25,11 +28,15 @@ export const users = pgTable(
     totpLastStep: integer("totp_last_step"),
     /** sha256 hashes of unused one-time recovery codes. */
     recoveryCodes: jsonb("recovery_codes").$type<string[]>().notNull().default([]),
+    /** Microsoft Entra object id (`oid`), tied on first Microsoft sign-in. */
+    microsoftSub: text("microsoft_sub"),
+    /** Google account id (`sub`), tied on first Google sign-in. */
+    googleSub: text("google_sub"),
     disabledAt: timestamp("disabled_at", { withTimezone: true }),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("users_email_idx").on(t.email)],
+  (t) => [uniqueIndex("users_email_idx").on(t.email), uniqueIndex("users_microsoft_sub_idx").on(t.microsoftSub), uniqueIndex("users_google_sub_idx").on(t.googleSub)],
 );
 
 /** One-time links an admin hands to a new user (or to reset someone). */

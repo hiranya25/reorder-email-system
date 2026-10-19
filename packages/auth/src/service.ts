@@ -1,6 +1,7 @@
 import { auditLogs, invites, loginAttempts, sessions, users, type Db, type Role, type User } from "@reorder/db";
-import { and, count, eq, gt, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, count, eq, gt, isNotNull, isNull, ne, or } from "drizzle-orm";
 import { decrypt, encrypt, randomToken, sha256 } from "./crypto";
+import type { ProviderId, SsoIdentity } from "./oidc";
 import { hashPassword, passwordProblem, verifyPassword } from "./password";
 import { generateRecoveryCodes, generateTotpSecret, normalizeRecoveryCode, otpauthUri, verifyTotp } from "./totp";
 
@@ -29,6 +30,8 @@ export type AuthErrorCode =
   | "domain_not_allowed"
   | "session_expired"
   | "last_admin"
+  | "not_invited"
+  | "account_mismatch"
   | "not_found";
 
 export class AuthError extends Error {
@@ -45,14 +48,48 @@ export interface RequestMeta {
   userAgent?: string | null;
 }
 
-export type SafeUser = Pick<User, "id" | "email" | "name" | "role" | "totpEnabled" | "disabledAt" | "lastLoginAt" | "createdAt">;
+export type SignInMethod = "password" | ProviderId;
+
+export type SafeUser = Pick<User, "id" | "email" | "name" | "role" | "totpEnabled" | "disabledAt" | "lastLoginAt" | "createdAt"> & {
+  /** How this person has signed in so far. Empty until they first sign in. */
+  signInMethods: SignInMethod[];
+};
+
+function methods(u: User): SignInMethod[] {
+  const m: SignInMethod[] = [];
+  if (u.microsoftSub) m.push("microsoft");
+  if (u.googleSub) m.push("google");
+  if (u.passwordHash) m.push("password");
+  return m;
+}
 
 function safe(u: User): SafeUser {
-  return { id: u.id, email: u.email, name: u.name, role: u.role, totpEnabled: u.totpEnabled, disabledAt: u.disabledAt, lastLoginAt: u.lastLoginAt, createdAt: u.createdAt };
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    totpEnabled: u.totpEnabled,
+    disabledAt: u.disabledAt,
+    lastLoginAt: u.lastLoginAt,
+    createdAt: u.createdAt,
+    signInMethods: methods(u),
+  };
 }
+
+/** Someone who has finished setting up some way to sign in. */
+const hasSignIn = or(isNotNull(users.passwordHash), isNotNull(users.microsoftSub), isNotNull(users.googleSub));
+
+const SUB_COLUMN = { microsoft: users.microsoftSub, google: users.googleSub } as const;
+const SUB_FIELD = { microsoft: "microsoftSub", google: "googleSub" } as const;
+const PROVIDER_LABEL: Record<ProviderId, string> = { microsoft: "Microsoft", google: "Google" };
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+function hasAnySignIn(u: User): boolean {
+  return !!(u.passwordHash || u.microsoftSub || u.googleSub);
 }
 
 const DUMMY_HASH = "scrypt$32768$8$1$c2FsdHNhbHRzYWx0c2FsdA$" + "A".repeat(86);
@@ -258,6 +295,62 @@ export class AuthService {
     return { sessionToken: await this.promote(session.id, user.id, meta), usedRecoveryCode, recoveryCodesLeft: recoveryCodes.length };
   }
 
+  // ---------- Sign in with Microsoft / Google ----------
+
+  /**
+   * After the provider has vouched for someone. Only invited people get in. The first sign-in ties
+   * the console account to that Microsoft or Google account; after that, a different account with
+   * the same email is refused.
+   */
+  async ssoLogin(identity: SsoIdentity, meta: RequestMeta = {}): Promise<{ sessionToken: string }> {
+    const email = normalizeEmail(identity.email);
+    const label = PROVIDER_LABEL[identity.provider];
+    if (this.c.allowedDomain && !email.endsWith(`@${this.c.allowedDomain.toLowerCase()}`)) {
+      throw new AuthError("domain_not_allowed", `Sign in with your @${this.c.allowedDomain} account.`);
+    }
+    const subField = SUB_FIELD[identity.provider];
+    const userId = await this.db.transaction(async (tx) => {
+      const [bySub] = await tx.select().from(users).where(eq(SUB_COLUMN[identity.provider], identity.subject));
+      if (bySub && bySub.email !== email) {
+        throw new AuthError("account_mismatch", `This ${label} account is linked to a different console user. Ask an admin to reset your sign-in.`);
+      }
+      const [user] = await tx.select().from(users).where(eq(users.email, email)).for("update");
+      const [invite] = await tx
+        .select()
+        .from(invites)
+        .where(and(eq(invites.email, email), isNull(invites.usedAt), gt(invites.expiresAt, this.now())))
+        .for("update");
+
+      if (user) {
+        if (user.disabledAt) throw new AuthError("invalid_credentials", "Your access has been turned off. Ask an admin if this is a mistake.");
+        const linked = user[subField];
+        if (linked && linked !== identity.subject) {
+          throw new AuthError("account_mismatch", `${email} is linked to a different ${label} account. Ask an admin to reset your sign-in.`);
+        }
+        if (!linked && !invite && !hasAnySignIn(user)) {
+          throw new AuthError("not_invited", "Your sign-in was reset. Ask an admin for a new invite.");
+        }
+        await tx
+          .update(users)
+          .set({ [subField]: identity.subject, lastLoginAt: this.now(), ...(invite ? { role: invite.role } : {}), ...(!user.name && identity.name ? { name: identity.name } : {}) })
+          .where(eq(users.id, user.id));
+        if (invite) await tx.update(invites).set({ usedAt: this.now() }).where(eq(invites.id, invite.id));
+        return { id: user.id, first: !linked };
+      }
+
+      if (!invite) throw new AuthError("not_invited", "You don't have access yet. Ask an admin to invite you.");
+      const [created] = await tx
+        .insert(users)
+        .values({ email, name: identity.name || email.split("@")[0]!, role: invite.role, [subField]: identity.subject, lastLoginAt: this.now(), createdAt: this.now() })
+        .returning();
+      await tx.update(invites).set({ usedAt: this.now() }).where(eq(invites.id, invite.id));
+      return { id: created!.id, first: true };
+    });
+    await this.recordAttempt(email, true, meta);
+    await this.audit(userId.id, `Signed in with ${label}`, userId.first ? `${label} account linked` : undefined);
+    return { sessionToken: await this.createSession(userId.id, "active", meta) };
+  }
+
   // ---------- sessions ----------
 
   private async createSession(userId: string, stage: "pending_totp" | "active", meta: RequestMeta): Promise<string> {
@@ -317,7 +410,7 @@ export class AuthService {
       .from(invites)
       .where(and(isNull(invites.usedAt), gt(invites.expiresAt, this.now())));
     const openSet = new Set(open.map((o) => o.email));
-    return rows.map((u) => ({ ...safe(u), pendingInvite: openSet.has(u.email) || !u.passwordHash }));
+    return rows.map((u) => ({ ...safe(u), pendingInvite: openSet.has(u.email) || !hasAnySignIn(u) }));
   }
 
   async listOpenInvites() {
@@ -336,7 +429,7 @@ export class AuthService {
     const [row] = await this.db
       .select({ n: count() })
       .from(users)
-      .where(and(eq(users.role, "admin"), isNull(users.disabledAt), ne(users.id, userId), isNotNull(users.passwordHash)));
+      .where(and(eq(users.role, "admin"), isNull(users.disabledAt), ne(users.id, userId), hasSignIn));
     if ((row?.n ?? 0) === 0) throw new AuthError("last_admin", "There must always be at least one active admin.");
     return target;
   }
@@ -356,13 +449,13 @@ export class AuthService {
     await this.audit(actorId, disabled ? "User disabled" : "User re-enabled", target.email);
   }
 
-  /** Lost phone or forgotten password: clears the sign-in and issues a new invite link. */
+  /** Lost phone, forgotten password or wrong Microsoft/Google account: clears the sign-in and issues a new invite. */
   async resetUser(actorId: string, userId: string): Promise<{ token: string; expiresAt: Date }> {
     const [target] = await this.db.select().from(users).where(eq(users.id, userId));
     if (!target) throw new AuthError("not_found", "User not found.");
     await this.db
       .update(users)
-      .set({ passwordHash: null, totpEnabled: false, totpSecretEnc: null, totpLastStep: null, recoveryCodes: [] })
+      .set({ passwordHash: null, totpEnabled: false, totpSecretEnc: null, totpLastStep: null, recoveryCodes: [], microsoftSub: null, googleSub: null })
       .where(eq(users.id, userId));
     await this.db.delete(sessions).where(eq(sessions.userId, userId));
     await this.audit(actorId, "Sign-in reset", target.email);
@@ -373,7 +466,7 @@ export class AuthService {
     const [row] = await this.db
       .select({ n: count() })
       .from(users)
-      .where(and(eq(users.role, "admin"), isNull(users.disabledAt), isNotNull(users.passwordHash)));
+      .where(and(eq(users.role, "admin"), isNull(users.disabledAt), hasSignIn));
     return (row?.n ?? 0) > 0;
   }
 }

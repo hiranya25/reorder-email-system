@@ -2,7 +2,10 @@ import { ConsoleShell } from "@/components/console/shell";
 import { SettingsView } from "@/components/settings/settings-view";
 import { UsersCard } from "@/components/settings/users-card";
 import { auth, requireUser } from "@/lib/server/auth";
+import { serverEnv } from "@/lib/server/env";
 import { loadAudit } from "@/lib/server/repo";
+
+const METHOD_LABEL = { microsoft: "Microsoft", google: "Google", password: "Password" } as const;
 
 export default async function SettingsPage() {
   const me = await requireUser();
@@ -25,7 +28,9 @@ export default async function SettingsPage() {
               disabled: !!u.disabledAt,
               pendingInvite: u.pendingInvite,
               lastLoginAt: u.lastLoginAt?.toISOString(),
+              signInMethods: u.signInMethods.map((m) => METHOD_LABEL[m]),
             }))}
+            options={{ providers: serverEnv().providers.map((p) => p.label), password: serverEnv().passwordLogin, domain: serverEnv().allowedEmailDomain }}
             invites={invites.map((i) => ({ email: i.email, role: i.role, expiresAt: i.expiresAt.toISOString() }))}
           />
         }
