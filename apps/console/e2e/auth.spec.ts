@@ -115,6 +115,9 @@ test("forgot password emails a one-time link", async ({ page }) => {
   const v = viewer();
   await page.goto("/login");
   await page.getByRole("link", { name: "Forgot password?" }).click();
+  // Both pages have a "Username or email" box: wait for the new page before typing.
+  await page.waitForURL(/\/login\/forgot$/);
+  await expect(page.getByRole("heading", { name: "Forgot your password?" })).toBeVisible();
   await page.getByLabel("Username or email").fill(v.email);
   await page.getByRole("button", { name: "Email me a link" }).click();
   await expect(page.getByText(/If an account matches, we've emailed a link/)).toBeVisible();
