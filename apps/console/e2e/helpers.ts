@@ -78,3 +78,16 @@ export async function signIn(page: Page, who = admin()) {
   await page.waitForURL(/\/campaigns$/);
   await expect(page.getByText(who.name, { exact: true })).toBeVisible();
 }
+
+/**
+ * Goes to a page and waits until React has finished streaming it in. Until then a streamed page can
+ * hold a hidden second copy (<div hidden id="S:…">) that trips Playwright's one-match rule.
+ */
+export async function go(page: Page, url: string) {
+  await page.goto(url);
+  await settled(page);
+}
+
+export async function settled(page: Page) {
+  await page.waitForFunction(() => !document.querySelector('div[hidden][id^="S:"]'));
+}
