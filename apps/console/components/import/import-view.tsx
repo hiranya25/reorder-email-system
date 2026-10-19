@@ -100,17 +100,21 @@ export function ImportView() {
   );
   const summary = useMemo(() => (result ? summarize(result) : undefined), [result]);
   const seasonInvalid = !season.start || !season.end || season.start > season.end;
-  const canImport = !!result && result.report.errors.length === 0 && !seasonInvalid && !busy;
+  const [saving, setSaving] = useState(false);
+  const canImport = !!result && result.report.errors.length === 0 && !seasonInvalid && !busy && !saving;
 
-  const doImport = () => {
-    if (!loaded || !sheet || !result) return;
-    saveImport(
+  const doImport = async () => {
+    if (!loaded || !sheet || !result || saving) return;
+    setSaving(true);
+    setConfirmReplace(false);
+    const ok = await saveImport(
       campaign.id,
       { fileName: loaded.fileName, sheetName: sheet.name, importedAt: new Date().toISOString(), mapping: toNamedMapping(loaded.mapping, headers), result },
       headerSignature(headers),
       season,
     );
-    router.push(`/campaigns/${campaign.id}/overview`);
+    setSaving(false);
+    if (ok) router.push(`/campaigns/${campaign.id}/overview`);
   };
 
   const crumbs = [{ label: campaign.name, href: `/campaigns/${campaign.id}/overview` }, { label: "Step 1" }];
@@ -148,8 +152,8 @@ export function ImportView() {
         subtitle="Bring in last season's sales export. The file is read in your browser; nothing is uploaded or sent."
         actions={
           loaded && (
-            <Button size="lg" disabled={!canImport} onClick={() => (importRecord ? setConfirmReplace(true) : doImport())}>
-              Confirm import →
+            <Button size="lg" disabled={!canImport} onClick={() => (importRecord ? setConfirmReplace(true) : void doImport())}>
+              {saving ? "Saving…" : "Confirm import →"}
             </Button>
           )
         }
@@ -255,7 +259,7 @@ export function ImportView() {
           <Button variant="secondary" onClick={() => setConfirmReplace(false)}>
             Cancel
           </Button>
-          <Button onClick={doImport}>Replace and import</Button>
+          <Button onClick={() => void doImport()}>Replace and import</Button>
         </div>
       </Modal>
     </>

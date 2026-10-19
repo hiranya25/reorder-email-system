@@ -21,7 +21,7 @@ pnpm lint && pnpm typecheck && pnpm build
 apps/console/scripts/prepare-standalone.sh && pnpm --filter @reorder/console e2e   # sign-in + full campaign flow in Chromium (after build)
 ```
 
-Sign-in (email + password + authenticator code) and users live in PostgreSQL. Campaign data is still stored in each browser (IndexedDB) until phase B2 moves it to the server. The **Holiday 2026 Reorder (demo)** campaign runs a synthetic sample export through the same pipeline; download it from the Import screen to try an upload.
+Everything lives in PostgreSQL: users and sign-in (email + password + authenticator code), campaigns, imports, review decisions, the catalog, picks, approvals and the activity log. Every change is checked on the server for the user's role and the campaign's lock. The **Holiday 2026 Reorder (demo)** campaign runs a synthetic sample export through the same pipeline; download it from the Import screen to try an upload.
 
 ## Layout
 

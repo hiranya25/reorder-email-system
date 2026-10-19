@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import { useState } from "react";
 import type { StepStatus } from "@reorder/core";
 import { Logo } from "./logo";
+import { SaveStatus } from "./save-status";
 import { Sidebar } from "./sidebar";
 
 /** Fixed sidebar on laptop screens; collapses to a top bar with a drawer on small screens. */
@@ -43,7 +44,8 @@ export function ConsoleShell({
         </div>
       )}
 
-      <main className="mx-auto max-w-[1280px] px-4 py-6 sm:px-8 sm:py-8">{children}</main>
+      <main className="mx-auto max-w-[1280px] px-4 py-6 pb-20 sm:px-8 sm:py-8 sm:pb-20">{children}</main>
+      <SaveStatus />
     </div>
   );
 }

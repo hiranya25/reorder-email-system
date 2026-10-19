@@ -6,7 +6,8 @@ import { closeDb, getDb } from "./client";
 /** Applies pending migrations. Run on every deploy; already-applied ones are skipped. */
 export async function runMigrations(url?: string) {
   const folder = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
-  await migrate(getDb(url), { migrationsFolder: folder });
+  // Bookkeeping table in "public": some hosts don't let the database user create schemas.
+  await migrate(getDb(url), { migrationsFolder: folder, migrationsSchema: "public" });
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

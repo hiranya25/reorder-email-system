@@ -3,7 +3,11 @@ import { createHmac } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const admin = () => JSON.parse(readFileSync(join(__dirname, ".auth.json"), "utf8")) as { email: string; password: string; name: string; secret: string };
+type Person = { email: string; password: string; name: string; secret: string };
+const people = () => JSON.parse(readFileSync(join(__dirname, ".auth.json"), "utf8")) as { admin: Person; reviewer: Person; viewer: Person };
+export const admin = () => people().admin;
+export const reviewer = () => people().reviewer;
+export const viewer = () => people().viewer;
 
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 function base32(text: string): Buffer {

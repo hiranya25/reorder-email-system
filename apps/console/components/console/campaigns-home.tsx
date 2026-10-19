@@ -1,12 +1,11 @@
 "use client";
 
-import { currentStepNumber, formatSeasonRange, STEP_LABELS, STEP_KEYS, type Campaign, type ImportRecord } from "@reorder/core";
+import { currentStepNumber, deriveSteps, formatSeasonRange, STEP_LABELS, STEP_KEYS, type StepStatus } from "@reorder/core";
 import { Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { mappingFor, stepsFor } from "@/lib/campaign-data";
-import { demoImport } from "@/lib/demo-import";
+import { useSessionUser } from "../session-provider";
 import { useAllCampaigns, useConsoleStore } from "@/lib/store";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
@@ -14,8 +13,9 @@ import { Modal } from "../ui/modal";
 import { StatusChip } from "../ui/status-chip";
 import { PageHeader } from "./page-header";
 
-function progressFor(c: Campaign, record: ImportRecord | undefined, decided: number, extra: Parameters<typeof stepsFor>[2]) {
-  const steps = stepsFor(c.isDemo ? demoImport() : record, decided, extra);
+const DRAFT_STEPS = deriveSteps({ decidedAccounts: 0, catalogUploaded: false, approverLabel: "" });
+
+function progressFor(steps: StepStatus[]) {
   const n = currentStepNumber(steps);
   const blocked = steps.filter((s) => s.state === "blocked").map((s) => s.label);
   return { n, steps, blocked };
@@ -27,17 +27,13 @@ function defaultSeason() {
   return { start: `${y - 1}-10-01`, end: `${y}-01-31`, name: `Holiday ${y} Reorder` };
 }
 
-export function CampaignsHome() {
+/** `progress` is worked out on the server for each campaign (see the campaigns page). */
+export function CampaignsHome({ progress }: { progress: Record<string, StepStatus[]> }) {
   const campaigns = useAllCampaigns();
   const createCampaign = useConsoleStore((s) => s.createCampaign);
   const deleteCampaign = useConsoleStore((s) => s.deleteCampaign);
-  const imports = useConsoleStore((s) => s.imports);
-  const decisions = useConsoleStore((s) => s.decisions);
-  const remembered = useConsoleStore((s) => s.remembered);
-  const hasCatalog = useConsoleStore((s) => !!s.catalog?.products.length);
-  const demoCatalogLoaded = useConsoleStore((s) => s.demoCatalogLoaded);
-  const productsConfirmed = useConsoleStore((s) => s.productsConfirmed);
-  const approvals = useConsoleStore((s) => s.approvals);
+  const isAdmin = useSessionUser().role === "admin";
+  const [creating, setCreating] = useState(false);
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(defaultSeason);
@@ -49,9 +45,11 @@ export function CampaignsHome() {
         title="Campaigns"
         subtitle="Each season's reorder campaign and where it stands. Nothing is sent without approval."
         actions={
-          <Button size="lg" onClick={() => { setForm(defaultSeason()); setOpen(true); }}>
-            <Plus size={16} /> New campaign
-          </Button>
+          isAdmin && (
+            <Button size="lg" onClick={() => { setForm(defaultSeason()); setOpen(true); }}>
+              <Plus size={16} /> New campaign
+            </Button>
+          )
         }
       />
 
@@ -68,13 +66,7 @@ export function CampaignsHome() {
           </thead>
           <tbody className="divide-y divide-line">
             {campaigns.map((c) => {
-              const record = c.isDemo ? demoImport() : imports[c.id];
-              const decided = mappingFor(c, record, decisions[c.id], remembered).filter((r) => r.status !== "pending").length;
-              const { n, steps, blocked } = progressFor(c, record, decided, {
-                catalogUploaded: c.isDemo ? demoCatalogLoaded : hasCatalog,
-                productsConfirmed: !!productsConfirmed[c.id],
-                approval: approvals[c.id],
-              });
+              const { n, steps, blocked } = progressFor(progress[c.id] ?? DRAFT_STEPS);
               return (
                 <tr key={c.id} className="hover:bg-canvas/50">
                   <td className="px-5 py-4">
@@ -103,12 +95,12 @@ export function CampaignsHome() {
                     {blocked.length > 0 && <StatusChip tone="bad" className="ml-2">{blocked.length} blocked</StatusChip>}
                   </td>
                   <td className="px-5 py-4 text-right">
-                    {!c.isDemo && (
+                    {!c.isDemo && isAdmin && (
                       <button
                         type="button"
                         aria-label={`Delete ${c.name}`}
                         className="rounded p-1.5 text-ink-muted hover:bg-bad-bg hover:text-bad-fg"
-                        onClick={() => confirm(`Delete "${c.name}"? This only removes it from this browser.`) && deleteCampaign(c.id)}
+                        onClick={() => confirm(`Delete "${c.name}" and all its review decisions? This can't be undone.`) && void deleteCampaign(c.id)}
                       >
                         <Trash2 size={16} />
                       </button>
@@ -124,10 +116,13 @@ export function CampaignsHome() {
       <Modal open={open} onClose={() => setOpen(false)} title="New campaign">
         <form
           className="space-y-4"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            if (invalid) return;
-            const c = createCampaign({ name: form.name.trim(), seasonStart: form.start, seasonEnd: form.end });
+            if (invalid || creating) return;
+            setCreating(true);
+            const c = await createCampaign({ name: form.name.trim(), seasonStart: form.start, seasonEnd: form.end });
+            setCreating(false);
+            if (!c) return;
             setOpen(false);
             router.push(`/campaigns/${c.id}/import`);
           }}
@@ -147,7 +142,7 @@ export function CampaignsHome() {
           {form.start > form.end && <p className="text-xs text-bad-fg">The season must end after it starts.</p>}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={invalid}>Create & import data</Button>
+            <Button type="submit" disabled={invalid || creating}>{creating ? "Creating…" : "Create & import data"}</Button>
           </div>
         </form>
       </Modal>

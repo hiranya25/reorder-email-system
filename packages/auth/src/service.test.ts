@@ -1,4 +1,5 @@
-import { auditLogs, closeDb, getDb, invites, loginAttempts, sessions, users } from "@reorder/db";
+import { closeDb, getDb } from "@reorder/db";
+import { sql } from "drizzle-orm";
 import { runMigrations } from "@reorder/db/migrate";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AuthService, type AuthConfig } from "./service";
@@ -31,12 +32,8 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("AuthService (PostgreSQL)", (
   });
   afterAll(closeDb);
   beforeEach(async () => {
-    const db = getDb(url);
-    await db.delete(auditLogs);
-    await db.delete(sessions);
-    await db.delete(invites);
-    await db.delete(loginAttempts);
-    await db.delete(users);
+    // CASCADE also clears anything else (campaigns, approvals, …) that points at users.
+    await getDb(url).execute(sql`truncate table users, invites, login_attempts, audit_logs cascade`);
     clock = new Date("2026-10-14T09:00:00Z");
   });
 

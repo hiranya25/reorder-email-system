@@ -73,7 +73,7 @@ test("admin invites a reviewer who sets up password and authenticator", async ({
   // Admin disables the reviewer: their session ends immediately.
   await page.reload();
   await page.getByRole("row", { name: /shruti@amipi\.com/ }).getByRole("button", { name: "Disable" }).click();
-  await expect(page.getByRole("row", { name: /shruti@amipi\.com/ }).getByText("Disabled")).toBeVisible();
+  await expect(page.getByRole("row", { name: /shruti@amipi\.com/ }).getByText("Disabled", { exact: true })).toBeVisible();
   await r.goto("/campaigns");
   await expect(r).toHaveURL(/\/login$/);
   await ctx.close();
