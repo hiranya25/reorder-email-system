@@ -6,6 +6,7 @@ const VARIANTS = {
   secondary: "bg-white text-ink border border-line hover:bg-canvas",
   gold: "bg-gold text-white hover:bg-gold-strong border border-gold",
   ghost: "text-ink hover:bg-canvas border border-transparent",
+  danger: "bg-bad-fg text-white border border-bad-fg hover:opacity-90",
   link: "text-ink underline underline-offset-4 decoration-1 hover:text-navy border-0 px-0",
 } as const;
 

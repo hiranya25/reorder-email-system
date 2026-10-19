@@ -49,6 +49,14 @@ MICROSOFT_CLIENT_SECRET=
 # Sign in with Google (step 4b). Leave out until you have them.
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+# Keep username/email + password + authenticator sign-in alongside Microsoft/Google.
+PASSWORD_LOGIN=on
+# Email for "Forgot password" (step 4c).
+SMTP_HOST=mail.nobulldiamond.com
+SMTP_PORT=465
+SMTP_USER=no-reply@nobulldiamond.com
+SMTP_PASSWORD=
+MAIL_FROM=AMIPI Reorder Console <no-reply@nobulldiamond.com>
 ENV
 chmod 600 ~/.reorder.env
 openssl rand -base64 48   # copy this into APP_SECRET above
@@ -71,9 +79,16 @@ For anyone whose @amipi.com email is on a Google account, about 10 minutes.
 3. **APIs & Services → Credentials → Create credentials → OAuth client ID**: type **Web application**; authorised redirect URI `https://reorder.nobulldiamond.com/auth/google/callback`.
 4. Copy **Client ID** → `GOOGLE_CLIENT_ID` and **Client secret** → `GOOGLE_CLIENT_SECRET`.
 
-Once at least one of these is set, the email + password + authenticator sign-in turns off. To keep it as well (for example while moving over), add `PASSWORD_LOGIN=on`.
+Once at least one of these is set, the username/email + password + authenticator sign-in turns off unless `PASSWORD_LOGIN=on` (it is in the settings file above).
 
-Either way, only people invited from **Settings → Users and roles** (or with `pnpm create-admin`) can get in, and only with an @amipi.com address. The first sign-in ties their console account to that Microsoft or Google account. If someone needs to switch accounts, an admin uses **Reset sign-in**.
+Either way, only people an admin added in **Settings → Users and roles** (or with `pnpm create-admin`) can get in, and only with an @amipi.com address. The first sign-in ties their console account to that Microsoft or Google account. If someone needs to switch accounts, an admin opens **Edit** on them and ticks **Untie their Microsoft/Google account**.
+
+## 4c. Email for "Forgot password"
+1. cPanel → **Email Accounts → Create**: `no-reply@nobulldiamond.com` with a strong password.
+2. Click **Connect Devices** next to it. Copy the **Outgoing Server** (e.g. `mail.nobulldiamond.com`, SMTP port **465**) into `SMTP_HOST` / `SMTP_PORT`, the address into `SMTP_USER`, and the mailbox password into `SMTP_PASSWORD`.
+3. Make sure the domain's SPF and DKIM are on (cPanel → **Email Deliverability**), so reset emails don't land in spam.
+
+Without these, "Forgot password" says it isn't set up, and an admin sets a new password from **Settings → Users → Edit** instead.
 
 ## 5. Create the Node.js app
 cPanel → **Setup Node.js App** → **Create Application**:
@@ -86,7 +101,7 @@ cPanel → **Setup Node.js App** → **Create Application**:
 | Application URL | `reorder.nobulldiamond.com` |
 | Application startup file | `app.js` |
 
-Under **Environment variables**, add the same values as in `~/.reorder.env` (`DATABASE_URL`, `APP_SECRET`, `APP_URL`, `ALLOWED_EMAIL_DOMAIN`, and the `MICROSOFT_…` / `GOOGLE_…` ones you have). Click **Create**.
+Under **Environment variables**, add the same values as in `~/.reorder.env` (`DATABASE_URL`, `APP_SECRET`, `APP_URL`, `ALLOWED_EMAIL_DOMAIN`, `PASSWORD_LOGIN`, the `SMTP_…` / `MAIL_FROM` ones, and the `MICROSOFT_…` / `GOOGLE_…` ones you have). Click **Create**.
 
 > Don't use the page's "Run NPM Install" button. The project uses pnpm and the deploy script installs everything.
 
@@ -105,11 +120,18 @@ The script pulls `main`, installs, builds, copies static files, updates the data
 ## 7. First admin
 ```bash
 set -a; . ~/.reorder.env; set +a
-pnpm create-admin you@amipi.com
+pnpm create-admin
 ```
-It prints a one-time link. Open it and click **Continue with Microsoft** (or Google) with that same email. Without Microsoft/Google set up, you choose a password and scan the QR code with an authenticator app instead. Then invite everyone else from **Settings → Users and roles**; invited people can also simply click the sign-in button on the login page.
+It asks for the admin's full name, username, email and password (typed hidden). Then sign in at `https://reorder.nobulldiamond.com/login` with the username (or email) and password, and scan the QR code with an authenticator app (Microsoft Authenticator or Google Authenticator).
 
-If every admin is ever locked out, run the same command with `--force`.
+From **Settings → Users and roles** the admin then:
+- **Adds people** with their name, username, email, role and password. Share the username and password in person or by Teams; each person sets up their own authenticator at first sign-in. Leave the password empty for someone who will only use Microsoft or Google.
+- **Edits** anyone: name, username, email, role, a new password, a reset authenticator (lost phone) or an untied Microsoft/Google account.
+- **Disables** or **deletes** people. Deleting keeps their name in the activity log and their past approvals. Nobody can delete themselves or the last admin.
+
+People change their own password with **Forgot password?** on the sign-in page: it emails a link that works once, for 1 hour.
+
+If every admin is ever locked out, run `pnpm create-admin --force`. For an admin who will only use Microsoft or Google, use `pnpm create-admin --invite you@amipi.com` to print a one-time link instead.
 
 ## Updating later
 ```bash
@@ -122,6 +144,8 @@ cd ~/reorder-email-system && ./scripts/deploy.sh
 - **Blank page or 503:** cPanel → Setup Node.js App → your app → **Restart**, then check the app's `stderr.log` (in `apps/console`).
 - **Microsoft says "AADSTS50011 … redirect URI":** the redirect URI in step 4a doesn't exactly match `APP_URL` + `/auth/microsoft/callback`.
 - **Google says "redirect_uri_mismatch":** same for step 4b (`/auth/google/callback`).
-- **"You don't have access yet":** the person hasn't been invited, or was invited with a different email. Invite them from Settings.
-- **"…is linked to a different Microsoft/Google account":** they used another account before. An admin clicks **Reset sign-in** and sends the new link.
+- **"You don't have access yet":** the person hasn't been added, or was added with a different email. Add them in Settings.
+- **"Password reset by email isn't set up yet":** the `SMTP_…` settings from step 4c are missing. Add them and restart the app.
+- **Reset emails don't arrive:** check the spam folder, then cPanel → **Email Deliverability** and **Track Delivery** for `no-reply@`.
+- **"…is linked to a different Microsoft/Google account":** they used another account before. An admin opens **Edit** on that person and ticks **Untie their Microsoft/Google account**.
 - **Can't sign in after changing APP_SECRET:** put the old value back, or reset each user from Settings.

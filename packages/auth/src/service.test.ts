@@ -173,4 +173,97 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("AuthService (PostgreSQL)", (
       expect(await auth.getSession(sessionToken)).toMatchObject({ email: "shreya@amipi.com", role: "reviewer" });
     });
   });
+
+  describe("accounts made by an admin", () => {
+    const PW = "Sparkle-Restock-77";
+
+    it("signs in with username or email, then the authenticator code", async () => {
+      const u = await auth.createUser(null, { name: "Shreya Patel", username: "Shreya.P", email: "shreya@amipi.com", role: "reviewer", password: PW });
+      expect(u).toMatchObject({ username: "shreya.p", signInMethods: ["password"] });
+      const byName = await auth.login("SHREYA.P", PW);
+      expect(byName.needsTotpSetup).toBe(true);
+      const { secret } = await auth.startTotpSetup(byName.sessionToken);
+      const { sessionToken } = await auth.confirmTotpSetup(byName.sessionToken, code(secret));
+      expect(await auth.getSession(sessionToken)).toMatchObject({ email: "shreya@amipi.com" });
+      advance(1);
+      const byEmail = await auth.login("shreya@amipi.com", PW);
+      expect(byEmail.needsTotpSetup).toBe(false);
+      await expect(auth.login("shreya.p", "wrong-password-123")).rejects.toMatchObject({ code: "invalid_credentials" });
+    });
+
+    it("checks names, emails and passwords", async () => {
+      await auth.createUser(null, { name: "A", username: "anna", email: "anna@amipi.com", role: "viewer", password: PW });
+      await expect(auth.createUser(null, { name: "B", username: "anna", email: "b@amipi.com", role: "viewer" })).rejects.toMatchObject({ code: "taken" });
+      await expect(auth.createUser(null, { name: "B", email: "ANNA@amipi.com", role: "viewer" })).rejects.toMatchObject({ code: "taken" });
+      await expect(auth.createUser(null, { name: "B", username: "a b", email: "b@amipi.com", role: "viewer" })).rejects.toMatchObject({ code: "invalid_input" });
+      await expect(auth.createUser(null, { name: "B", email: "b@gmail.com", role: "viewer" })).rejects.toMatchObject({ code: "domain_not_allowed" });
+      await expect(auth.createUser(null, { name: "B", username: "bobby", email: "b@amipi.com", role: "viewer", password: "bobby-Restock-77" })).rejects.toMatchObject({ code: "weak_password" });
+      // No password: they'll use Microsoft or Google, and can be tied on first sign-in.
+      await auth.createUser(null, { name: "Cara", email: "cara@amipi.com", role: "viewer" });
+      const { sessionToken } = await auth.ssoLogin({ provider: "google", subject: "g-cara", email: "cara@amipi.com", name: "Cara" });
+      expect(await auth.getSession(sessionToken)).toMatchObject({ email: "cara@amipi.com", signInMethods: ["google"] });
+    });
+
+    it("lets an admin edit someone, which signs them out", async () => {
+      const admin = await auth.createUser(null, { name: "Owner", username: "owner", email: "owner@amipi.com", role: "admin", password: PW });
+      const u = await auth.createUser(admin.id, { name: "Shruti", username: "shruti", email: "shruti@amipi.com", role: "reviewer", password: PW });
+      const { sessionToken } = await auth.ssoLogin({ provider: "microsoft", subject: "oid-s", email: "shruti@amipi.com", name: "" });
+      const changed = await auth.updateUser(admin.id, u.id, { username: "shruti.k", password: "Another-Season-2027", resetAuthenticator: true });
+      expect(changed).toMatchObject({ username: "shruti.k", totpEnabled: false });
+      expect(await auth.getSession(sessionToken)).toBeUndefined();
+      expect((await auth.login("shruti.k", "Another-Season-2027")).needsTotpSetup).toBe(true);
+      // A new email unties the Microsoft account that belonged to the old one.
+      expect((await auth.updateUser(admin.id, u.id, { email: "shruti.k@amipi.com" })).signInMethods).toEqual(["password"]);
+      await expect(auth.updateUser(admin.id, admin.id, { role: "viewer" })).rejects.toMatchObject({ code: "last_admin" });
+      await expect(auth.updateUser(admin.id, u.id, { username: "owner" })).rejects.toMatchObject({ code: "taken" });
+    });
+
+    it("deletes someone but keeps their name in the log and their approvals", async () => {
+      const admin = await auth.createUser(null, { name: "Owner", username: "owner", email: "owner@amipi.com", role: "admin", password: PW });
+      const u = await auth.createUser(admin.id, { name: "Shreya Patel", email: "shreya@amipi.com", role: "reviewer", password: PW });
+      await auth.audit(u.id, "Approved");
+      const db = getDb(url);
+      await db.execute(sql`insert into campaigns (id, name, season_start, season_end, status) values ('c1', 'Holiday', '2025-10-01', '2025-12-31', 'draft')`);
+      await db.execute(sql`insert into approvals (campaign_id, user_id, user_name) values ('c1', ${u.id}, 'Shreya Patel')`);
+      await expect(auth.deleteUser(admin.id, admin.id)).rejects.toMatchObject({ code: "invalid_input" });
+      await auth.deleteUser(admin.id, u.id);
+      expect((await auth.listUsers()).map((x) => x.email)).toEqual(["owner@amipi.com"]);
+      const log = await db.execute(sql`select user_id, user_name from audit_logs where action = 'Approved'`);
+      expect(log[0]).toMatchObject({ user_id: null, user_name: "Shreya Patel" });
+      const approvals = await db.execute(sql`select user_name from approvals`);
+      expect(approvals[0]).toMatchObject({ user_name: "Shreya Patel" });
+      // The email can be used again.
+      await auth.createUser(admin.id, { name: "Shreya", email: "shreya@amipi.com", role: "viewer" });
+    });
+  });
+
+  describe("forgot password", () => {
+    const PW = "Sparkle-Restock-77";
+
+    it("emails a one-time link that sets a new password and signs out everywhere", async () => {
+      await auth.createUser(null, { name: "Shreya", username: "shreya", email: "shreya@amipi.com", role: "reviewer", password: PW });
+      const { sessionToken } = await auth.ssoLogin({ provider: "google", subject: "g1", email: "shreya@amipi.com", name: "" });
+      expect(await auth.requestPasswordReset("nobody@amipi.com")).toBeUndefined();
+      const link = (await auth.requestPasswordReset("Shreya"))!;
+      expect(link.email).toBe("shreya@amipi.com");
+      expect(await auth.getPasswordReset(link.token)).toEqual({ email: "shreya@amipi.com", username: "shreya" });
+      await expect(auth.resetPassword(link.token, "short")).rejects.toMatchObject({ code: "weak_password" });
+      await auth.resetPassword(link.token, "Brand-New-Season-88");
+      expect(await auth.getSession(sessionToken)).toBeUndefined();
+      await expect(auth.resetPassword(link.token, "Brand-New-Season-99")).rejects.toMatchObject({ code: "reset_invalid" });
+      await expect(auth.login("shreya", PW)).rejects.toMatchObject({ code: "invalid_credentials" });
+      expect(await auth.login("shreya", "Brand-New-Season-88")).toBeDefined();
+    });
+
+    it("expires links and limits how many are sent", async () => {
+      await auth.createUser(null, { name: "Shreya", email: "shreya@amipi.com", role: "reviewer", password: PW });
+      const first = (await auth.requestPasswordReset("shreya@amipi.com"))!;
+      advance(61);
+      await expect(auth.resetPassword(first.token, "Brand-New-Season-88")).rejects.toMatchObject({ code: "reset_invalid" });
+      expect(await auth.requestPasswordReset("shreya@amipi.com")).toBeDefined();
+      expect(await auth.requestPasswordReset("shreya@amipi.com")).toBeDefined();
+      expect(await auth.requestPasswordReset("shreya@amipi.com")).toBeDefined();
+      expect(await auth.requestPasswordReset("shreya@amipi.com")).toBeUndefined();
+    });
+  });
 });

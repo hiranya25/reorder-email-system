@@ -5,12 +5,15 @@ import { cookies } from "next/headers";
 import { encrypt } from "@reorder/auth";
 import { assertPasswordLogin, auth, clearCookie, formError, PENDING_COOKIE, RECOVERY_COOKIE, requestMeta, SESSION_COOKIE, SESSION_SECONDS, setCookie } from "@/lib/server/auth";
 import { serverEnv } from "@/lib/server/env";
+import { canSendMail, passwordResetMail, sendMail } from "@/lib/server/mail";
 
 export interface FormState {
   error?: string;
   /** Typed values to put back after an error (React resets the form after each submit). */
   email?: string;
   name?: string;
+  /** Forgot password: the email step is done. */
+  sent?: boolean;
 }
 
 const PENDING_SECONDS = 10 * 60;
@@ -77,4 +80,34 @@ export async function acceptInviteAction(token: string, _: FormState, form: Form
     return { error: formError(e), name };
   }
   redirect("/login/verify");
+}
+
+/** Always answers the same way, so the page doesn't reveal which accounts exist. */
+export async function forgotPasswordAction(_: FormState, form: FormData): Promise<FormState> {
+  const identifier = String(form.get("email") ?? "").trim();
+  if (!serverEnv().passwordLogin) return { error: "Sign in with Microsoft or Google instead; there's no console password to reset." };
+  if (!canSendMail()) return { error: "Password reset by email isn't set up yet. Ask an admin to set a new password for you.", email: identifier };
+  if (!identifier) return { error: "Enter your username or email." };
+  try {
+    const link = await auth().requestPasswordReset(identifier);
+    if (link) {
+      await sendMail(passwordResetMail({ to: link.email, name: link.name, link: `${serverEnv().appUrl}/reset-password/${link.token}`, minutes: 60 }));
+    }
+  } catch (e) {
+    console.error("Password reset email failed", e);
+    return { error: "We couldn't send the email just now. Try again in a few minutes, or ask an admin.", email: identifier };
+  }
+  return { sent: true };
+}
+
+export async function resetPasswordAction(token: string, _: FormState, form: FormData): Promise<FormState> {
+  const password = String(form.get("password") ?? "");
+  if (password !== String(form.get("confirm") ?? "")) return { error: "The two passwords don't match." };
+  try {
+    assertPasswordLogin();
+    await auth().resetPassword(token, password);
+  } catch (e) {
+    return { error: formError(e) };
+  }
+  redirect("/login?reset=1");
 }

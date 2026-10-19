@@ -8,12 +8,9 @@ import { loadAudit } from "@/lib/server/repo";
 const METHOD_LABEL = { microsoft: "Microsoft", google: "Google", password: "Password" } as const;
 
 export default async function SettingsPage() {
-  const me = await requireUser();
-  const [users, invites, audit] = await Promise.all([
-    auth().listUsers(),
-    me.role === "admin" ? auth().listOpenInvites() : Promise.resolve([]),
-    loadAudit({ limit: 100 }),
-  ]);
+  await requireUser();
+  const env = serverEnv();
+  const [users, audit] = await Promise.all([auth().listUsers(), loadAudit({ limit: 100 })]);
   return (
     <ConsoleShell>
       <SettingsView
@@ -23,15 +20,17 @@ export default async function SettingsPage() {
             users={users.map((u) => ({
               id: u.id,
               email: u.email,
+              username: u.username ?? undefined,
               name: u.name,
               role: u.role,
               disabled: !!u.disabledAt,
               pendingInvite: u.pendingInvite,
               lastLoginAt: u.lastLoginAt?.toISOString(),
               signInMethods: u.signInMethods.map((m) => METHOD_LABEL[m]),
+              authenticatorOn: u.totpEnabled,
+              linkedAccount: u.signInMethods.some((m) => m !== "password"),
             }))}
-            options={{ providers: serverEnv().providers.map((p) => p.label), password: serverEnv().passwordLogin, domain: serverEnv().allowedEmailDomain }}
-            invites={invites.map((i) => ({ email: i.email, role: i.role, expiresAt: i.expiresAt.toISOString() }))}
+            options={{ providers: env.providers.map((p) => p.label), password: env.passwordLogin, domain: env.allowedEmailDomain }}
           />
         }
       />

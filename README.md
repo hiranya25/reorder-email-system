@@ -19,7 +19,7 @@ pnpm install
 cp apps/console/.env.example apps/console/.env.local   # then edit DATABASE_URL / APP_SECRET
 set -a; . apps/console/.env.local; set +a
 pnpm db:migrate
-pnpm create-admin your.name@amipi.com   # prints a one-time sign-in setup link
+pnpm create-admin   # asks for the first admin's name, username, email and password
 pnpm dev          # http://localhost:3000
 pnpm test         # unit tests (packages/core)
 pnpm lint && pnpm typecheck && pnpm build

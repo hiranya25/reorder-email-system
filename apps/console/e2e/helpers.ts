@@ -9,6 +9,13 @@ export const admin = () => people().admin;
 export const reviewer = () => people().reviewer;
 export const viewer = () => people().viewer;
 
+/** After a test changes someone's password, later tests sign in with the new one. */
+export function setPassword(who: "admin" | "reviewer" | "viewer", password: string) {
+  const all = people();
+  all[who].password = password;
+  writeFileSync(join(__dirname, ".auth.json"), JSON.stringify(all));
+}
+
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 function base32(text: string): Buffer {
   let bits = 0, value = 0;
@@ -62,7 +69,7 @@ export async function freshCode(secret: string, page: Page): Promise<string> {
 
 export async function signIn(page: Page, who = admin()) {
   await page.goto("/login");
-  await page.getByLabel("Work email").fill(who.email);
+  await page.getByLabel("Username or email").fill(who.email);
   await page.getByLabel("Password").fill(who.password);
   await page.getByRole("button", { name: "Continue" }).click();
   await page.waitForURL(/\/login\/verify$/);

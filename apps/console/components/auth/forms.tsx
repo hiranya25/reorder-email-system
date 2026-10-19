@@ -2,7 +2,17 @@
 
 import { Check, Copy, Download } from "lucide-react";
 import { useActionState, useState } from "react";
-import { acceptInviteAction, confirmSetupAction, finishRecoveryCodesAction, loginAction, verifyCodeAction, type FormState } from "@/app/login/actions";
+import Link from "next/link";
+import {
+  acceptInviteAction,
+  confirmSetupAction,
+  finishRecoveryCodesAction,
+  forgotPasswordAction,
+  loginAction,
+  resetPasswordAction,
+  verifyCodeAction,
+  type FormState,
+} from "@/app/login/actions";
 import { downloadText } from "@/lib/download";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/field";
@@ -15,8 +25,8 @@ export function LoginForm() {
   return (
     <form action={action} className="space-y-4">
       <FormError message={state.error} />
-      <Field label="Work email">
-        <Input name="email" type="email" autoComplete="username" required autoFocus={!state.email} placeholder="you@amipi.com" defaultValue={state.email} />
+      <Field label="Username or email">
+        <Input name="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required autoFocus={!state.email} placeholder="shreya or shreya@amipi.com" defaultValue={state.email} />
       </Field>
       <Field label="Password">
         <Input name="password" type="password" autoComplete="current-password" required autoFocus={!!state.email} />
@@ -24,7 +34,12 @@ export function LoginForm() {
       <Button type="submit" size="lg" className="w-full" disabled={pending}>
         {pending ? "Checking…" : "Continue"}
       </Button>
-      <p className="text-center text-[12px] text-ink-muted">Forgot your password or lost your phone? Ask an admin to reset your sign-in.</p>
+      <p className="text-center text-[12px] text-ink-muted">
+        <Link href="/login/forgot" className="font-semibold text-ink underline underline-offset-2">
+          Forgot password?
+        </Link>{" "}
+        Lost your phone? Ask an admin to reset your authenticator.
+      </p>
     </form>
   );
 }
@@ -143,6 +158,57 @@ export function InviteForm({ token, email, name }: { token: string; email: strin
       </Field>
       <Button type="submit" size="lg" className="w-full" disabled={pending}>
         {pending ? "Saving…" : "Set password and continue"}
+      </Button>
+    </form>
+  );
+}
+
+export function ForgotPasswordForm() {
+  const [state, action, pending] = useActionState(forgotPasswordAction, initial);
+  if (state.sent) {
+    return (
+      <div className="space-y-4 text-[14px]">
+        <p role="status" className="rounded-lg bg-ok-bg px-3 py-2.5 text-ok-fg">
+          If an account matches, we&apos;ve emailed a link to choose a new password. It works once, for 1 hour. Check your spam folder too.
+        </p>
+        <Link href="/login" className="block text-center text-[13px] font-semibold underline underline-offset-2">
+          Back to sign in
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <form action={action} className="space-y-4">
+      <FormError message={state.error} />
+      <Field label="Username or email">
+        <Input name="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required autoFocus defaultValue={state.email} />
+      </Field>
+      <Button type="submit" size="lg" className="w-full" disabled={pending}>
+        {pending ? "Sending…" : "Email me a link"}
+      </Button>
+      <Link href="/login" className="block text-center text-[13px] text-ink-muted underline underline-offset-2">
+        Back to sign in
+      </Link>
+    </form>
+  );
+}
+
+export function ResetPasswordForm({ token, email }: { token: string; email: string }) {
+  const [state, action, pending] = useActionState(resetPasswordAction.bind(null, token), initial);
+  return (
+    <form action={action} className="space-y-4">
+      <FormError message={state.error} />
+      <Field label="Account">
+        <Input value={email} readOnly className="bg-canvas" autoComplete="username" />
+      </Field>
+      <Field label="New password" hint="At least 12 characters. A short sentence works well.">
+        <Input name="password" type="password" required minLength={12} autoComplete="new-password" autoFocus />
+      </Field>
+      <Field label="Type it again">
+        <Input name="confirm" type="password" required minLength={12} autoComplete="new-password" />
+      </Field>
+      <Button type="submit" size="lg" className="w-full" disabled={pending}>
+        {pending ? "Saving…" : "Save new password"}
       </Button>
     </form>
   );

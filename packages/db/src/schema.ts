@@ -17,6 +17,8 @@ export const users = pgTable(
     id: id(),
     /** Always stored lower-case. */
     email: text("email").notNull(),
+    /** Optional sign-in name, lower-case (letters, digits, dot, dash, underscore). */
+    username: text("username"),
     name: text("name").notNull(),
     role: roleEnum("role").notNull(),
     /** scrypt hash; null until the invite is accepted. */
@@ -36,7 +38,11 @@ export const users = pgTable(
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("users_email_idx").on(t.email), uniqueIndex("users_microsoft_sub_idx").on(t.microsoftSub), uniqueIndex("users_google_sub_idx").on(t.googleSub)],
+  (t) => [
+    uniqueIndex("users_email_idx").on(t.email),
+    uniqueIndex("users_username_idx").on(t.username),
+    uniqueIndex("users_microsoft_sub_idx").on(t.microsoftSub), uniqueIndex("users_google_sub_idx").on(t.googleSub),
+  ],
 );
 
 /** One-time links an admin hands to a new user (or to reset someone). */
@@ -50,7 +56,7 @@ export const invites = pgTable(
     tokenHash: text("token_hash").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     usedAt: timestamp("used_at", { withTimezone: true }),
-    createdBy: uuid("created_by").references(() => users.id),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("invites_token_idx").on(t.tokenHash)],
@@ -76,6 +82,22 @@ export const sessions = pgTable(
   (t) => [uniqueIndex("sessions_token_idx").on(t.tokenHash), index("sessions_user_idx").on(t.userId)],
 );
 
+/** "Forgot password" links sent by email. Only the hash of the token is stored. */
+export const passwordResets = pgTable(
+  "password_resets",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("password_resets_token_idx").on(t.tokenHash), index("password_resets_user_idx").on(t.userId)],
+);
+
 /** Failed and successful sign-in attempts, for lockout after repeated failures. */
 export const loginAttempts = pgTable(
   "login_attempts",
@@ -94,7 +116,9 @@ export const auditLogs = pgTable(
   "audit_logs",
   {
     id: id(),
-    userId: uuid("user_id").references(() => users.id),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    /** Filled in when the user is deleted, so the log still says who did it. */
+    userName: text("user_name"),
     campaignId: text("campaign_id"),
     action: text("action").notNull(),
     detail: text("detail"),
@@ -122,7 +146,7 @@ export const campaigns = pgTable("campaigns", {
   productsConfirmedAt: at("products_confirmed_at"),
   productsConfirmedBy: text("products_confirmed_by"),
   exportedAt: at("exported_at"),
-  createdBy: uuid("created_by").references(() => users.id),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: createdAt(),
 });
 
@@ -135,7 +159,7 @@ const campaignRef = () =>
 export const campaignImports = pgTable("campaign_imports", {
   campaignId: campaignRef().primaryKey(),
   record: jsonb("record").notNull(),
-  importedBy: uuid("imported_by").references(() => users.id),
+  importedBy: uuid("imported_by").references(() => users.id, { onDelete: "set null" }),
   importedAt: at("imported_at").notNull().defaultNow(),
 });
 
@@ -194,9 +218,8 @@ export const approvals = pgTable(
   "approvals",
   {
     campaignId: campaignRef(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id),
+    /** Not a foreign key: an approval stays on record even if the approver's account is deleted. */
+    userId: uuid("user_id").notNull(),
     userName: text("user_name").notNull(),
     approvedAt: at("approved_at").notNull().defaultNow(),
   },
@@ -207,7 +230,7 @@ export const approvals = pgTable(
 export const catalogs = pgTable("catalogs", {
   id: id(),
   record: jsonb("record").notNull(),
-  uploadedBy: uuid("uploaded_by").references(() => users.id),
+  uploadedBy: uuid("uploaded_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: createdAt(),
 });
 
@@ -215,6 +238,6 @@ export const catalogs = pgTable("catalogs", {
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),
   value: jsonb("value").notNull(),
-  updatedBy: uuid("updated_by").references(() => users.id),
+  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
   updatedAt: at("updated_at").notNull().defaultNow(),
 });

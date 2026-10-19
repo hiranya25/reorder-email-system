@@ -13,6 +13,10 @@ export interface ServerEnv {
   providers: Provider[];
   /** Email + password + authenticator code. Off once a provider is set, unless PASSWORD_LOGIN=on. */
   passwordLogin: boolean;
+  /** Outgoing email for "forgot password", e.g. a cPanel mailbox. */
+  smtp?: { host: string; port: number; user?: string; pass?: string; from: string };
+  /** Tests only: write emails to this file instead of sending them. */
+  mailOutboxFile?: string;
 }
 
 let cached: ServerEnv | undefined;
@@ -45,6 +49,16 @@ export function serverEnv(): ServerEnv {
     secureCookies: appUrl.startsWith("https://"),
     providers,
     passwordLogin: pw ? pw === "on" : providers.length === 0,
+    smtp: e.SMTP_HOST
+      ? {
+          host: e.SMTP_HOST,
+          port: Number(e.SMTP_PORT ?? 465),
+          user: e.SMTP_USER || undefined,
+          pass: e.SMTP_PASSWORD || undefined,
+          from: e.MAIL_FROM || `AMIPI Reorder Console <${e.SMTP_USER ?? `no-reply@${new URL(appUrl).hostname}`}>`,
+        }
+      : undefined,
+    mailOutboxFile: e.MAIL_OUTBOX_FILE || undefined,
   };
   return cached;
 }

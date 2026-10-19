@@ -1,4 +1,4 @@
-import { auditLogs, invites, loginAttempts, sessions, users, type Db, type Role, type User } from "@reorder/db";
+import { auditLogs, invites, loginAttempts, passwordResets, sessions, users, type Db, type Role, type User } from "@reorder/db";
 import { and, count, eq, gt, isNotNull, isNull, ne, or } from "drizzle-orm";
 import { decrypt, encrypt, randomToken, sha256 } from "./crypto";
 import type { ProviderId, SsoIdentity } from "./oidc";
@@ -16,6 +16,10 @@ export interface AuthConfig {
   idleHours?: number;
   /** Time allowed between password and authenticator code. */
   pendingMinutes?: number;
+  /** How long a "forgot password" link works. */
+  resetTtlMinutes?: number;
+  /** "Forgot password" emails per account per hour. */
+  maxResetsPerHour?: number;
   maxFailures?: number;
   lockMinutes?: number;
   now?: () => Date;
@@ -32,6 +36,9 @@ export type AuthErrorCode =
   | "last_admin"
   | "not_invited"
   | "account_mismatch"
+  | "invalid_input"
+  | "taken"
+  | "reset_invalid"
   | "not_found";
 
 export class AuthError extends Error {
@@ -50,7 +57,7 @@ export interface RequestMeta {
 
 export type SignInMethod = "password" | ProviderId;
 
-export type SafeUser = Pick<User, "id" | "email" | "name" | "role" | "totpEnabled" | "disabledAt" | "lastLoginAt" | "createdAt"> & {
+export type SafeUser = Pick<User, "id" | "email" | "username" | "name" | "role" | "totpEnabled" | "disabledAt" | "lastLoginAt" | "createdAt"> & {
   /** How this person has signed in so far. Empty until they first sign in. */
   signInMethods: SignInMethod[];
 };
@@ -67,6 +74,7 @@ function safe(u: User): SafeUser {
   return {
     id: u.id,
     email: u.email,
+    username: u.username,
     name: u.name,
     role: u.role,
     totpEnabled: u.totpEnabled,
@@ -88,6 +96,41 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+export function normalizeUsername(username: string): string {
+  return username.trim().toLowerCase();
+}
+
+/** Why a username can't be used, or undefined when it's fine. */
+export function usernameProblem(username: string): string | undefined {
+  if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username)) return "Usernames are 3–32 characters: letters, numbers, dot, dash or underscore.";
+  return undefined;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export interface UserInput {
+  name: string;
+  /** Optional; empty means "sign in with email". */
+  username?: string;
+  email: string;
+  role: Role;
+  /** Optional; empty means they'll use Microsoft or Google. */
+  password?: string;
+}
+
+export interface UserChanges {
+  name?: string;
+  username?: string;
+  email?: string;
+  role?: Role;
+  /** A new password; empty leaves it unchanged. */
+  password?: string;
+  /** Lost phone: they set up the authenticator again at next sign-in. */
+  resetAuthenticator?: boolean;
+  /** Untie their Microsoft and Google accounts. */
+  unlinkAccounts?: boolean;
+}
+
 function hasAnySignIn(u: User): boolean {
   return !!(u.passwordHash || u.microsoftSub || u.googleSub);
 }
@@ -107,6 +150,8 @@ export class AuthService {
       sessionTtlHours: 24 * 7,
       idleHours: 24,
       pendingMinutes: 10,
+      resetTtlMinutes: 60,
+      maxResetsPerHour: 3,
       maxFailures: 5,
       lockMinutes: 15,
       now: () => new Date(),
@@ -201,17 +246,29 @@ export class AuthService {
     return new AuthError("locked", `Too many attempts. Try again in ${this.c.lockMinutes} minutes, or ask an admin to reset your sign-in.`);
   }
 
-  /** Step 1: email + password. Returns a short-lived session that still needs the authenticator code. */
-  async login(emailInput: string, password: string, meta: RequestMeta = {}): Promise<{ sessionToken: string; needsTotpSetup: boolean }> {
-    const email = normalizeEmail(emailInput);
+  private async findByLogin(identifier: string): Promise<User | undefined> {
+    const id = identifier.trim().toLowerCase();
+    if (!id) return undefined;
+    const [user] = await this.db
+      .select()
+      .from(users)
+      .where(id.includes("@") ? eq(users.email, id) : eq(users.username, id));
+    return user;
+  }
+
+  /** Step 1: username or email + password. Returns a short-lived session that still needs the authenticator code. */
+  async login(identifier: string, password: string, meta: RequestMeta = {}): Promise<{ sessionToken: string; needsTotpSetup: boolean }> {
+    const found = await this.findByLogin(identifier);
+    // Lockout is per account (by email), whichever name was typed.
+    const email = found?.email ?? normalizeEmail(identifier);
     if ((await this.failures(email)) >= this.c.maxFailures) throw this.lockedError();
-    const [user] = await this.db.select().from(users).where(eq(users.email, email));
+    const user = found;
     const usable = user && user.passwordHash && !user.disabledAt;
     // Always run one hash check so response time doesn't reveal which emails exist.
     const ok = await verifyPassword(password, usable ? user.passwordHash! : DUMMY_HASH);
     if (!usable || !ok) {
       await this.recordAttempt(email, false, meta);
-      throw new AuthError("invalid_credentials", "That email and password don't match.");
+      throw new AuthError("invalid_credentials", "That username or email and password don't match.");
     }
     return { sessionToken: await this.createSession(user.id, "pending_totp", meta), needsTotpSetup: !user.totpEnabled };
   }
@@ -327,9 +384,6 @@ export class AuthService {
         if (linked && linked !== identity.subject) {
           throw new AuthError("account_mismatch", `${email} is linked to a different ${label} account. Ask an admin to reset your sign-in.`);
         }
-        if (!linked && !invite && !hasAnySignIn(user)) {
-          throw new AuthError("not_invited", "Your sign-in was reset. Ask an admin for a new invite.");
-        }
         await tx
           .update(users)
           .set({ [subField]: identity.subject, lastLoginAt: this.now(), ...(invite ? { role: invite.role } : {}), ...(!user.name && identity.name ? { name: identity.name } : {}) })
@@ -410,7 +464,7 @@ export class AuthService {
       .from(invites)
       .where(and(isNull(invites.usedAt), gt(invites.expiresAt, this.now())));
     const openSet = new Set(open.map((o) => o.email));
-    return rows.map((u) => ({ ...safe(u), pendingInvite: openSet.has(u.email) || !hasAnySignIn(u) }));
+    return rows.map((u) => ({ ...safe(u), pendingInvite: !u.lastLoginAt && (openSet.has(u.email) || !hasAnySignIn(u) || !u.totpEnabled) }));
   }
 
   async listOpenInvites() {
@@ -460,6 +514,176 @@ export class AuthService {
     await this.db.delete(sessions).where(eq(sessions.userId, userId));
     await this.audit(actorId, "Sign-in reset", target.email);
     return this.createInvite({ email: target.email, role: target.role, createdBy: actorId });
+  }
+
+  private async assertFree(field: "email" | "username", value: string, exceptId?: string) {
+    const col = field === "email" ? users.email : users.username;
+    const [row] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(col, value), exceptId ? ne(users.id, exceptId) : undefined));
+    if (row) throw new AuthError("taken", field === "email" ? "Someone already uses that email." : "That username is taken.");
+  }
+
+  private checkEmail(email: string) {
+    if (!EMAIL_RE.test(email)) throw new AuthError("invalid_input", "Enter a valid email address.");
+    if (this.c.allowedDomain && !email.endsWith(`@${this.c.allowedDomain.toLowerCase()}`)) {
+      throw new AuthError("domain_not_allowed", `Only @${this.c.allowedDomain} addresses can be added.`);
+    }
+  }
+
+  private checkPassword(password: string, email: string, username?: string | null) {
+    const problem = passwordProblem(password, email) ?? (username && username.length >= 3 && password.toLowerCase().includes(username) ? "Don't include your username in the password." : undefined);
+    if (problem) throw new AuthError("weak_password", problem);
+  }
+
+  /** Admin adds someone directly with their username, email and (optionally) a password. */
+  async createUser(actorId: string | null, input: UserInput): Promise<SafeUser> {
+    const name = input.name.trim();
+    const email = normalizeEmail(input.email);
+    const username = input.username?.trim() ? normalizeUsername(input.username) : null;
+    if (!name) throw new AuthError("invalid_input", "Enter their name.");
+    this.checkEmail(email);
+    if (username) {
+      const problem = usernameProblem(username);
+      if (problem) throw new AuthError("invalid_input", problem);
+    }
+    const password = input.password ?? "";
+    if (password) this.checkPassword(password, email, username);
+    await this.assertFree("email", email);
+    if (username) await this.assertFree("username", username);
+    const [user] = await this.db
+      .insert(users)
+      .values({ email, username, name, role: input.role, passwordHash: password ? await hashPassword(password) : null, createdAt: this.now() })
+      .returning();
+    await this.audit(actorId, "User added", `${username ? `${username} · ` : ""}${email} as ${input.role}`);
+    return safe(user!);
+  }
+
+  /** Admin edits someone: name, username, email, role, password, authenticator and linked accounts. */
+  async updateUser(actorId: string, userId: string, changes: UserChanges): Promise<SafeUser> {
+    const [target] = await this.db.select().from(users).where(eq(users.id, userId));
+    if (!target) throw new AuthError("not_found", "User not found.");
+    if (changes.role && changes.role !== "admin" && target.role === "admin") await this.assertNotLastAdmin(userId);
+
+    const set: Partial<typeof users.$inferInsert> = {};
+    const notes: string[] = [];
+    let endSessions = false;
+    if (changes.name !== undefined) {
+      const name = changes.name.trim();
+      if (!name) throw new AuthError("invalid_input", "Enter their name.");
+      if (name !== target.name) set.name = name;
+    }
+    const email = changes.email !== undefined ? normalizeEmail(changes.email) : target.email;
+    if (email !== target.email) {
+      this.checkEmail(email);
+      await this.assertFree("email", email, userId);
+      // A Microsoft/Google account was tied to the old address.
+      Object.assign(set, { email, microsoftSub: null, googleSub: null });
+      notes.push(`email ${target.email} → ${email}`);
+      endSessions = true;
+    }
+    let username = target.username;
+    if (changes.username !== undefined) {
+      username = changes.username.trim() ? normalizeUsername(changes.username) : null;
+      if (username !== target.username) {
+        if (username) {
+          const problem = usernameProblem(username);
+          if (problem) throw new AuthError("invalid_input", problem);
+          await this.assertFree("username", username, userId);
+        }
+        set.username = username;
+        notes.push(`username ${target.username ?? "none"} → ${username ?? "none"}`);
+      }
+    }
+    if (changes.role && changes.role !== target.role) {
+      set.role = changes.role;
+      notes.push(`role ${target.role} → ${changes.role}`);
+    }
+    if (changes.password) {
+      this.checkPassword(changes.password, email, username);
+      set.passwordHash = await hashPassword(changes.password);
+      notes.push("new password");
+      endSessions = true;
+    }
+    if (changes.resetAuthenticator) {
+      Object.assign(set, { totpEnabled: false, totpSecretEnc: null, totpLastStep: null, recoveryCodes: [] });
+      notes.push("authenticator reset");
+      endSessions = true;
+    }
+    if (changes.unlinkAccounts && (target.microsoftSub || target.googleSub)) {
+      Object.assign(set, { microsoftSub: null, googleSub: null });
+      notes.push("Microsoft/Google unlinked");
+      endSessions = true;
+    }
+    if (!Object.keys(set).length) return safe(target);
+    const [updated] = await this.db.update(users).set(set).where(eq(users.id, userId)).returning();
+    if (endSessions) await this.db.delete(sessions).where(eq(sessions.userId, userId));
+    await this.audit(actorId, "User updated", `${target.email}: ${notes.join(", ")}`);
+    return safe(updated!);
+  }
+
+  /** Removes the account. The activity log keeps their name and their past approvals stay on record. */
+  async deleteUser(actorId: string, userId: string) {
+    if (actorId === userId) throw new AuthError("invalid_input", "You can't delete your own account.");
+    const target = await this.assertNotLastAdmin(userId);
+    await this.db.transaction(async (tx) => {
+      await tx.update(auditLogs).set({ userName: target.name }).where(eq(auditLogs.userId, userId));
+      await tx.update(invites).set({ usedAt: this.now() }).where(and(eq(invites.email, target.email), isNull(invites.usedAt)));
+      await tx.delete(users).where(eq(users.id, userId));
+    });
+    await this.audit(actorId, "User deleted", `${target.name} · ${target.email}`);
+  }
+
+  // ---------- forgot password ----------
+
+  /**
+   * Makes a one-time link for "forgot password". Returns undefined (and the page says the same
+   * thing either way) when there's no such enabled account or too many links were asked for.
+   */
+  async requestPasswordReset(identifier: string): Promise<{ token: string; email: string; name: string; expiresAt: Date } | undefined> {
+    const user = await this.findByLogin(identifier);
+    if (!user || user.disabledAt) return undefined;
+    const [recent] = await this.db
+      .select({ n: count() })
+      .from(passwordResets)
+      .where(and(eq(passwordResets.userId, user.id), gt(passwordResets.createdAt, this.minutesAgo(60))));
+    if ((recent?.n ?? 0) >= this.c.maxResetsPerHour) return undefined;
+    const token = randomToken();
+    const expiresAt = new Date(this.now().getTime() + this.c.resetTtlMinutes * 60_000);
+    await this.db.insert(passwordResets).values({ userId: user.id, tokenHash: sha256(token), expiresAt, createdAt: this.now() });
+    await this.audit(user.id, "Password reset requested");
+    return { token, email: user.email, name: user.name, expiresAt };
+  }
+
+  private async openReset(token: string) {
+    const [row] = await this.db
+      .select({ reset: passwordResets, user: users })
+      .from(passwordResets)
+      .innerJoin(users, eq(users.id, passwordResets.userId))
+      .where(and(eq(passwordResets.tokenHash, sha256(token)), isNull(passwordResets.usedAt), gt(passwordResets.expiresAt, this.now())));
+    if (!row || row.user.disabledAt) return undefined;
+    return row;
+  }
+
+  async getPasswordReset(token: string): Promise<{ email: string; username: string | null } | undefined> {
+    const row = await this.openReset(token);
+    return row && { email: row.user.email, username: row.user.username };
+  }
+
+  /** Sets the new password from the emailed link. Signs them out everywhere; the authenticator stays. */
+  async resetPassword(token: string, password: string) {
+    const row = await this.openReset(token);
+    if (!row) throw new AuthError("reset_invalid", "This link has expired or was already used. Ask for a new one.");
+    this.checkPassword(password, row.user.email, row.user.username);
+    const hash = await hashPassword(password);
+    await this.db.transaction(async (tx) => {
+      await tx.update(users).set({ passwordHash: hash }).where(eq(users.id, row.user.id));
+      // This link and any other open ones stop working.
+      await tx.update(passwordResets).set({ usedAt: this.now() }).where(and(eq(passwordResets.userId, row.user.id), isNull(passwordResets.usedAt)));
+      await tx.delete(sessions).where(eq(sessions.userId, row.user.id));
+    });
+    await this.audit(row.user.id, "Password changed", "with an emailed link");
   }
 
   async hasActiveAdmin(): Promise<boolean> {

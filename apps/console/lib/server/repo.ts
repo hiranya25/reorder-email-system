@@ -155,13 +155,13 @@ export async function loadCampaignSnapshot(id: string): Promise<CampaignSnapshot
 
 export async function loadAudit(opts: { campaignId?: string; limit: number }): Promise<AuditEntry[]> {
   const rows = await db()
-    .select({ id: auditLogs.id, at: auditLogs.createdAt, by: users.name, campaignId: auditLogs.campaignId, action: auditLogs.action, detail: auditLogs.detail })
+    .select({ id: auditLogs.id, at: auditLogs.createdAt, by: users.name, byDeleted: auditLogs.userName, campaignId: auditLogs.campaignId, action: auditLogs.action, detail: auditLogs.detail })
     .from(auditLogs)
     .leftJoin(users, eq(users.id, auditLogs.userId))
     .where(opts.campaignId ? eq(auditLogs.campaignId, opts.campaignId) : undefined)
     .orderBy(desc(auditLogs.createdAt))
     .limit(opts.limit);
-  return rows.map((r) => ({ id: r.id, at: r.at.toISOString(), by: r.by ?? "System", campaignId: r.campaignId ?? undefined, action: r.action, detail: r.detail ?? undefined }));
+  return rows.map((r) => ({ id: r.id, at: r.at.toISOString(), by: r.by ?? (r.byDeleted ? `${r.byDeleted} (deleted)` : "System"), campaignId: r.campaignId ?? undefined, action: r.action, detail: r.detail ?? undefined }));
 }
 
 export async function audit(userId: string, action: string, detail?: string, campaignId?: string) {
