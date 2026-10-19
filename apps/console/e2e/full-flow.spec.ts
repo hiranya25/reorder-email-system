@@ -110,7 +110,7 @@ test("import → map → products → picks → two approvals → export", async
   // First approval (admin): locks the campaign, export still blocked
   await page.goto(`${base}/approve`);
   await page.getByRole("button", { name: "Approve (1 of 2)" }).click();
-  await page.getByLabel("Type APPROVE to confirm").fill("approve");
+  await page.locator("dialog[open]").getByLabel("Type APPROVE to confirm").fill("approve");
   await page.locator("dialog").getByRole("button", { name: "Approve & lock" }).click();
   await expect(page.getByRole("main").getByText(/waiting for 1 more approval from a different person/)).toBeVisible();
   await expect(page.getByRole("button", { name: /Give approval 2 of 2/ })).toBeDisabled();
@@ -123,7 +123,7 @@ test("import → map → products → picks → two approvals → export", async
   await r.goto(`${base}/approve`);
   await expect(r.getByText("Approval 1: Owner", { exact: false })).toBeVisible();
   await r.getByRole("button", { name: "Give approval 2 of 2" }).click();
-  await r.getByLabel("Type APPROVE to confirm").fill("APPROVE");
+  await r.locator("dialog[open]").getByLabel("Type APPROVE to confirm").fill("APPROVE");
   await r.locator("dialog").getByRole("button", { name: "Approve & lock" }).click();
   await expect(r.getByText("Approved and locked", { exact: true })).toBeVisible();
   // Reviewers can't export; that's an admin step.

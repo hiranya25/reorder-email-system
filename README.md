@@ -20,7 +20,8 @@ cp apps/console/.env.example apps/console/.env.local   # then edit DATABASE_URL 
 set -a; . apps/console/.env.local; set +a
 pnpm db:migrate
 pnpm create-admin   # asks for the first admin's name, username, email and password
-pnpm dev          # http://localhost:3000
+pnpm dev          # http://localhost:3000 (builds each page the first time you open it, so first clicks are slow)
+pnpm preview      # the fast production build on http://localhost:3000, as on the server
 pnpm test         # unit tests (packages/core)
 pnpm lint && pnpm typecheck && pnpm build
 apps/console/scripts/prepare-standalone.sh && pnpm --filter @reorder/console e2e   # sign-in + full campaign flow in Chromium (after build)
