@@ -197,7 +197,7 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("AuthService (PostgreSQL)", (
       await expect(auth.createUser(null, { name: "B", email: "ANNA@amipi.com", role: "viewer" })).rejects.toMatchObject({ code: "taken" });
       await expect(auth.createUser(null, { name: "B", username: "a b", email: "b@amipi.com", role: "viewer" })).rejects.toMatchObject({ code: "invalid_input" });
       await expect(auth.createUser(null, { name: "B", email: "b@gmail.com", role: "viewer" })).rejects.toMatchObject({ code: "domain_not_allowed" });
-      await expect(auth.createUser(null, { name: "B", username: "bobby", email: "b@amipi.com", role: "viewer", password: "bobby-Restock-77" })).rejects.toMatchObject({ code: "weak_password" });
+      await expect(auth.createUser(null, { name: "B", username: "bobby", email: "b@amipi.com", role: "viewer", password: "bobby-restock-77" })).rejects.toMatchObject({ code: "weak_password" });
       // No password: they'll use Microsoft or Google, and can be tied on first sign-in.
       await auth.createUser(null, { name: "Cara", email: "cara@amipi.com", role: "viewer" });
       const { sessionToken } = await auth.ssoLogin({ provider: "google", subject: "g-cara", email: "cara@amipi.com", name: "Cara" });

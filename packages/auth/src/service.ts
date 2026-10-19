@@ -214,7 +214,7 @@ export class AuthService {
         .where(and(eq(invites.tokenHash, sha256(token)), isNull(invites.usedAt), gt(invites.expiresAt, this.now())))
         .for("update");
       if (!invite) throw new AuthError("invite_invalid", "This invite link has expired or was already used. Ask an admin for a new one.");
-      const problem = passwordProblem(input.password, invite.email);
+      const problem = passwordProblem(input.password);
       if (problem) throw new AuthError("weak_password", problem);
       const passwordHash = await hashPassword(input.password);
       const reset = { name, role: invite.role, passwordHash, totpEnabled: false, totpSecretEnc: null, totpLastStep: null, recoveryCodes: [], disabledAt: null };
@@ -554,8 +554,8 @@ export class AuthService {
     }
   }
 
-  private checkPassword(password: string, email: string, username?: string | null) {
-    const problem = passwordProblem(password, email) ?? (username && username.length >= 3 && password.toLowerCase().includes(username) ? "Don't include your username in the password." : undefined);
+  private checkPassword(password: string) {
+    const problem = passwordProblem(password);
     if (problem) throw new AuthError("weak_password", problem);
   }
 
@@ -571,7 +571,7 @@ export class AuthService {
       if (problem) throw new AuthError("invalid_input", problem);
     }
     const password = input.password ?? "";
-    if (password) this.checkPassword(password, email, username);
+    if (password) this.checkPassword(password);
     await this.assertFree("email", email);
     if (username) await this.assertFree("username", username);
     const [user] = await this.db
@@ -623,7 +623,7 @@ export class AuthService {
       notes.push(`role ${target.role} → ${changes.role}`);
     }
     if (changes.password) {
-      this.checkPassword(changes.password, email, username);
+      this.checkPassword(changes.password);
       set.passwordHash = await hashPassword(changes.password);
       notes.push("new password");
       endSessions = true;
@@ -697,7 +697,7 @@ export class AuthService {
   async resetPassword(token: string, password: string) {
     const row = await this.openReset(token);
     if (!row) throw new AuthError("reset_invalid", "This link has expired or was already used. Ask for a new one.");
-    this.checkPassword(password, row.user.email, row.user.username);
+    this.checkPassword(password);
     const hash = await hashPassword(password);
     await this.db.transaction(async (tx) => {
       await tx.update(users).set({ passwordHash: hash }).where(eq(users.id, row.user.id));

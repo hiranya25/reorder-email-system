@@ -1,5 +1,6 @@
 "use client";
 
+import { PASSWORD_RULE, passwordProblem } from "@reorder/auth/rules";
 import { Eye, EyeOff, UserPlus, Wand2 } from "lucide-react";
 import { useActionState, useState, useTransition } from "react";
 import { createUserAction, deleteUserAction, setDisabledAction, updateUserAction, type UserActionState } from "@/app/(console)/settings/user-actions";
@@ -48,11 +49,14 @@ const ROLE_HELP: Record<SessionUser["role"], string> = {
   viewer: "See campaigns, previews and results",
 };
 
-/** 16 characters from an alphabet without look-alikes (no 0/O, 1/l/I). */
+/** 16 characters from an alphabet without look-alikes (no 0/O, 1/l/I), always meeting the password rule. */
 function generatePassword(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789-!";
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+  for (;;) {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    const p = Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+    if (!passwordProblem(p)) return p;
+  }
 }
 
 function RoleSelect({ defaultValue }: { defaultValue: SessionUser["role"] }) {
@@ -77,7 +81,7 @@ function PasswordFields({ label, hint, required }: { label: string; hint: string
     <>
       <Field label={label} hint={hint}>
         <div className="flex gap-2">
-          <Input name="password" type={type} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required={required} minLength={12} />
+          <Input name="password" type={type} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required={required} minLength={6} />
           <Button variant="secondary" className="h-10 shrink-0 px-2.5" aria-label={shown ? "Hide password" : "Show password"} onClick={() => setShown(!shown)}>
             {shown ? <EyeOff size={15} /> : <Eye size={15} />}
           </Button>
@@ -95,6 +99,11 @@ function PasswordFields({ label, hint, required }: { label: string; hint: string
           </Button>
         </div>
       </Field>
+      {password && (passwordProblem(password) || (confirm && confirm !== password)) && (
+        <p className="text-[12px] text-bad-fg sm:col-span-2" role="status">
+          {passwordProblem(password) ?? "The two passwords don't match yet."}
+        </p>
+      )}
       <Field label="Type the password again">
         <Input name="confirm" type={type} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required={!!password} />
       </Field>
@@ -145,7 +154,7 @@ function AddUserForm({ options }: { options: SignInOptions }) {
           {options.password && (
             <PasswordFields
               label={passwordOptional ? "Password (optional)" : "Password"}
-              hint={passwordOptional ? `At least 12 characters. Leave empty if they'll only use ${options.providers.join(" or ")}.` : "At least 12 characters."}
+              hint={passwordOptional ? `${PASSWORD_RULE} Leave empty if they'll only use ${options.providers.join(" or ")}.` : PASSWORD_RULE}
               required={!passwordOptional}
             />
           )}
@@ -180,7 +189,7 @@ function EditUserForm({ user, options, onDone }: { user: UserRow; options: SignI
         <Field label="Role">
           <RoleSelect defaultValue={user.role} />
         </Field>
-        {options.password && <PasswordFields label="New password" hint="Leave empty to keep their current password. A new one signs them out everywhere." />}
+        {options.password && <PasswordFields label="New password" hint={`${PASSWORD_RULE} Leave empty to keep their current password; a new one signs them out everywhere.`} />}
       </div>
       {user.authenticatorOn && (
         <label className="flex items-start gap-2 text-[13px]">

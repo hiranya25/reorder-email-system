@@ -2,6 +2,7 @@
 
 import { Check, Copy, Download } from "lucide-react";
 import { useActionState, useState } from "react";
+import { PASSWORD_RULE } from "@reorder/auth/rules";
 import Link from "next/link";
 import {
   acceptInviteAction,
@@ -150,11 +151,11 @@ export function InviteForm({ token, email, name }: { token: string; email: strin
       <Field label="Your name">
         <Input name="name" defaultValue={state.name ?? name} required autoFocus maxLength={80} autoComplete="name" />
       </Field>
-      <Field label="Choose a password" hint="At least 12 characters. A short sentence works well.">
-        <Input name="password" type="password" required minLength={12} autoComplete="new-password" />
+      <Field label="Choose a password" hint={PASSWORD_RULE}>
+        <Input name="password" type="password" required minLength={6} autoComplete="new-password" />
       </Field>
       <Field label="Type it again">
-        <Input name="confirm" type="password" required minLength={12} autoComplete="new-password" />
+        <Input name="confirm" type="password" required minLength={6} autoComplete="new-password" />
       </Field>
       <Button type="submit" size="lg" className="w-full" disabled={pending}>
         {pending ? "Saving…" : "Set password and continue"}
@@ -201,11 +202,11 @@ export function ResetPasswordForm({ token, email }: { token: string; email: stri
       <Field label="Account">
         <Input value={email} readOnly className="bg-canvas" autoComplete="username" />
       </Field>
-      <Field label="New password" hint="At least 12 characters. A short sentence works well.">
-        <Input name="password" type="password" required minLength={12} autoComplete="new-password" autoFocus />
+      <Field label="New password" hint={PASSWORD_RULE}>
+        <Input name="password" type="password" required minLength={6} autoComplete="new-password" autoFocus />
       </Field>
       <Field label="Type it again">
-        <Input name="confirm" type="password" required minLength={12} autoComplete="new-password" />
+        <Input name="confirm" type="password" required minLength={6} autoComplete="new-password" />
       </Field>
       <Button type="submit" size="lg" className="w-full" disabled={pending}>
         {pending ? "Saving…" : "Save new password"}

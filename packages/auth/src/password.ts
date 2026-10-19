@@ -28,16 +28,4 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return key.length === expected.length && timingSafeEqual(key, expected);
 }
 
-const COMMON = ["password", "123456", "qwerty", "letmein", "welcome", "admin", "amipi", "iloveyou", "monkey", "dragon"];
-
-/** Returns a plain-language problem, or undefined when the password is acceptable. */
-export function passwordProblem(password: string, email: string): string | undefined {
-  if (password.length < 12) return "Use at least 12 characters.";
-  if (password.length > 200) return "Use at most 200 characters.";
-  const lower = password.toLowerCase();
-  const local = email.split("@")[0]?.toLowerCase() ?? "";
-  if (local.length >= 3 && lower.includes(local)) return "Don't include your email name in the password.";
-  if (COMMON.some((c) => lower.includes(c)) && new Set(lower).size < 8) return "That password is too easy to guess.";
-  if (new Set(password).size < 5) return "Use a mix of different characters.";
-  return undefined;
-}
+export { PASSWORD_RULE, passwordProblem } from "./rules";

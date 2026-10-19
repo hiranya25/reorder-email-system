@@ -37,7 +37,11 @@ test("admin adds, edits, disables and deletes a user", async ({ page, browser })
   await add.getByLabel("Username").fill("shruti");
   await add.getByLabel("Email").fill("shruti@amipi.com");
   await add.getByLabel("Role").selectOption("reviewer");
+  // The rule shows while typing: 6+ characters with an uppercase, a lowercase and a number.
+  await add.getByLabel("Password (optional)").fill("abcdef1");
+  await expect(add.getByText("Include at least one uppercase letter (A–Z).")).toBeVisible();
   await add.getByLabel("Password (optional)").fill("Holiday-Picks-Season-26!");
+  await expect(add.getByText(/Include at least one/)).toHaveCount(0);
   await add.getByLabel("Type the password again").fill("Holiday-Picks-Season-26!");
   await add.getByRole("button", { name: "Add user" }).click();
   await expect(page.getByText(/Shruti K added\./)).toBeVisible();

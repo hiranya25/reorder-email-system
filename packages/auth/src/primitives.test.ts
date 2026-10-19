@@ -53,10 +53,12 @@ describe("passwords", () => {
   });
 
   it("explains weak passwords", () => {
-    expect(passwordProblem("short", "a@amipi.com")).toMatch(/12 characters/);
-    expect(passwordProblem("shruti-is-great-2026", "shruti@amipi.com")).toMatch(/email name/);
-    expect(passwordProblem("aaaaaaaaaaaaaa", "x@amipi.com")).toMatch(/mix/);
-    expect(passwordProblem("Restock-Season-2026!", "shruti@amipi.com")).toBeUndefined();
+    expect(passwordProblem("Ab1")).toMatch(/6 characters/);
+    expect(passwordProblem("abcdef1")).toMatch(/uppercase/);
+    expect(passwordProblem("ABCDEF1")).toMatch(/lowercase/);
+    expect(passwordProblem("Abcdefg")).toMatch(/number/);
+    expect(passwordProblem("Abcde1")).toBeUndefined();
+    expect(passwordProblem("Restock-Season-2026!")).toBeUndefined();
   });
 });
 

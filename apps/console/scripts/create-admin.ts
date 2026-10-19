@@ -6,7 +6,7 @@
  * Needs DATABASE_URL, APP_SECRET and APP_URL in the environment. The password is typed hidden and
  * never appears in the shell history.
  */
-import { AuthService, passwordProblem, usernameProblem } from "@reorder/auth";
+import { AuthService, PASSWORD_RULE, passwordProblem, usernameProblem } from "@reorder/auth";
 import { closeDb, getDb } from "@reorder/db";
 import { createInterface } from "node:readline";
 
@@ -62,7 +62,8 @@ async function main() {
   const name = await askUntil("Full name: ", (v) => (v ? undefined : "Enter a name."));
   const username = await askUntil("Username (optional, press Enter to skip): ", (v) => (v ? usernameProblem(v.toLowerCase()) : undefined));
   const email = await askUntil(`Email (@${domain}): `, (v) => (v.toLowerCase().endsWith(`@${domain}`) ? undefined : `Use an @${domain} address.`));
-  const password = await askUntil("Password (hidden, at least 12 characters): ", (v) => passwordProblem(v, email), true);
+  console.log(`Password rule: ${PASSWORD_RULE}`);
+  const password = await askUntil("Password (hidden): ", passwordProblem, true);
   const again = await ask("Type the password again: ", true);
   if (again !== password) throw new Error("The two passwords don't match. Nothing was created.");
 
