@@ -88,8 +88,8 @@ test("import → map → products → picks → approve → export", async ({ pa
   // Preview shows the brand and a working reorder link
   await page.goto(`${base}/preview`);
   const frame = page.frameLocator("iframe");
-  await expect(frame.getByText("Lumière Wholesale")).toBeVisible();
-  await expect(frame.getByRole("link", { name: /Reorder these items/i })).toHaveAttribute("href", /^mailto:orders@lumiere\.example/);
+  await expect(frame.getByText("Lumière Wholesale", { exact: true }).first()).toBeVisible();
+  await expect(frame.getByRole("link", { name: /Yes, Go Ahead/i })).toHaveAttribute("href", /^mailto:orders@lumiere\.example/);
 
   // Approve, lock, export
   await page.goto(`${base}/approve`);

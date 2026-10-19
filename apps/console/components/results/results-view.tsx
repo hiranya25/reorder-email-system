@@ -9,7 +9,7 @@ import { Card, CardHeader } from "../ui/card";
 const METRICS = [
   ["Opens", "Share of customers who opened the email", "Mailchimp report"],
   ["Clicks", "Clicks on any link in the email", "Mailchimp report"],
-  ["Reorder clicks", "Clicks on REORDER THESE ITEMS", "Mailchimp click map"],
+  ["Reorder clicks", "Clicks on Yes, Go Ahead", "Mailchimp click map"],
   ["Recommendation clicks", "Clicks on the 3 new-season picks", "Mailchimp click map"],
   ["Reorders and revenue", "Orders placed from the email", "UTM links + store orders"],
 ] as const;
