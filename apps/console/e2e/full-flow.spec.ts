@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { signIn } from "./helpers";
 
 /** Runs the whole campaign on the synthetic sample export; no customer data involved. */
 
@@ -34,6 +35,8 @@ test("import → map → products → picks → approve → export", async ({ pa
   await page.route("https://images.example/**", (r) => r.fulfill({ status: 404 }));
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
+
+  await signIn(page);
 
   // New campaign + import the sample export
   await page.goto("/campaigns");

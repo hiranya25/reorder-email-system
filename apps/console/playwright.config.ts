@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { E2E_ENV } from "./e2e/global-setup";
 
 const PORT = 3200;
 
@@ -6,19 +7,22 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 120_000,
   fullyParallel: false,
+  workers: 1,
   retries: 0,
   reporter: process.env.CI ? "github" : "list",
+  globalSetup: "./e2e/global-setup.ts",
   use: {
     baseURL: `http://localhost:${PORT}`,
     acceptDownloads: true,
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 1000 } } }],
-  // Expects `next build` to have run (CI builds first).
+  // Runs the same standalone server cPanel runs. Expects `pnpm build` + prepare-standalone first.
   webServer: {
-    command: `pnpm exec next start -p ${PORT}`,
-    url: `http://localhost:${PORT}/campaigns`,
+    command: "node .next/standalone/apps/console/server.js",
+    url: `http://localhost:${PORT}/login`,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
+    env: { ...E2E_ENV, PORT: String(PORT), HOSTNAME: "127.0.0.1", NODE_ENV: "production" },
   },
 });
