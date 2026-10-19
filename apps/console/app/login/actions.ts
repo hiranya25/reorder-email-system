@@ -20,14 +20,17 @@ const PENDING_SECONDS = 10 * 60;
 
 export async function loginAction(_: FormState, form: FormData): Promise<FormState> {
   const email = String(form.get("email") ?? "");
+  let signedIn = false;
   try {
     assertPasswordLogin();
-    const { sessionToken } = await auth().login(email, String(form.get("password") ?? ""), await requestMeta());
-    await setCookie(PENDING_COOKIE, sessionToken, PENDING_SECONDS);
+    const r = await auth().login(email, String(form.get("password") ?? ""), await requestMeta());
+    signedIn = r.signedIn;
+    // Authenticator off: the password is enough. On: a short-lived session until the code.
+    await (signedIn ? setCookie(SESSION_COOKIE, r.sessionToken, SESSION_SECONDS) : setCookie(PENDING_COOKIE, r.sessionToken, PENDING_SECONDS));
   } catch (e) {
     return { error: formError(e), email };
   }
-  redirect("/login/verify");
+  redirect(signedIn ? "/campaigns" : "/login/verify");
 }
 
 async function pendingToken(): Promise<string> {
@@ -72,14 +75,16 @@ export async function acceptInviteAction(token: string, _: FormState, form: Form
   const password = String(form.get("password") ?? "");
   const name = String(form.get("name") ?? "");
   if (password !== String(form.get("confirm") ?? "")) return { error: "The two passwords don't match.", name };
+  let signedIn = false;
   try {
     assertPasswordLogin();
-    const { sessionToken } = await auth().acceptInvite(token, { name, password }, await requestMeta());
-    await setCookie(PENDING_COOKIE, sessionToken, PENDING_SECONDS);
+    const r = await auth().acceptInvite(token, { name, password }, await requestMeta());
+    signedIn = r.signedIn;
+    await (signedIn ? setCookie(SESSION_COOKIE, r.sessionToken, SESSION_SECONDS) : setCookie(PENDING_COOKIE, r.sessionToken, PENDING_SECONDS));
   } catch (e) {
     return { error: formError(e), name };
   }
-  redirect("/login/verify");
+  redirect(signedIn ? "/campaigns" : "/login/verify");
 }
 
 /** Always answers the same way, so the page doesn't reveal which accounts exist. */

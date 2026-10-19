@@ -266,4 +266,19 @@ describe.skipIf(process.env.SKIP_DB_TESTS === "1")("AuthService (PostgreSQL)", (
       expect(await auth.requestPasswordReset("shreya@amipi.com")).toBeUndefined();
     });
   });
+
+  describe("with the authenticator turned off", () => {
+    it("signs in with the password alone and still locks after repeated failures", async () => {
+      const off = new AuthService(getDb(url), { ...config, requireAuthenticator: false });
+      await off.createUser(null, { name: "Shreya", username: "shreya", email: "shreya@amipi.com", role: "reviewer", password: "Sparkle-Restock-77" });
+      const r = await off.login("shreya", "Sparkle-Restock-77");
+      expect(r.signedIn).toBe(true);
+      expect(await off.getSession(r.sessionToken)).toMatchObject({ email: "shreya@amipi.com" });
+      expect((await off.listUsers())[0]!.pendingInvite).toBe(false);
+      // The code step can't be used to get in a different way.
+      await expect(off.verifyLogin(r.sessionToken, "000000")).rejects.toMatchObject({ code: "session_expired" });
+      for (let i = 0; i < 5; i++) await expect(off.login("shreya", "wrong-password-123")).rejects.toMatchObject({ code: "invalid_credentials" });
+      await expect(off.login("shreya", "Sparkle-Restock-77")).rejects.toMatchObject({ code: "locked" });
+    });
+  });
 });

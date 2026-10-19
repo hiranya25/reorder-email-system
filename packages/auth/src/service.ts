@@ -16,6 +16,8 @@ export interface AuthConfig {
   idleHours?: number;
   /** Time allowed between password and authenticator code. */
   pendingMinutes?: number;
+  /** Ask for a 6-digit authenticator code after the password. Off: the password alone signs in. */
+  requireAuthenticator?: boolean;
   /** How long a "forgot password" link works. */
   resetTtlMinutes?: number;
   /** "Forgot password" emails per account per hour. */
@@ -150,6 +152,7 @@ export class AuthService {
       sessionTtlHours: 24 * 7,
       idleHours: 24,
       pendingMinutes: 10,
+      requireAuthenticator: true,
       resetTtlMinutes: 60,
       maxResetsPerHour: 3,
       maxFailures: 5,
@@ -200,8 +203,8 @@ export class AuthService {
     return { email: row.email, role: row.role, name: existing?.name ?? "" };
   }
 
-  /** Sets the password and returns a session that still needs authenticator setup. */
-  async acceptInvite(token: string, input: { name: string; password: string }, meta: RequestMeta = {}): Promise<{ sessionToken: string }> {
+  /** Sets the password. Returns a session that still needs authenticator setup, or a full one when the authenticator is off. */
+  async acceptInvite(token: string, input: { name: string; password: string }, meta: RequestMeta = {}): Promise<{ sessionToken: string; signedIn: boolean }> {
     const name = input.name.trim();
     if (!name) throw new AuthError("weak_password", "Enter your name.");
     const userId = await this.db.transaction(async (tx) => {
@@ -225,7 +228,11 @@ export class AuthService {
       return user!.id;
     });
     await this.audit(userId, "Invite accepted");
-    return { sessionToken: await this.createSession(userId, "pending_totp", meta) };
+    if (!this.c.requireAuthenticator) {
+      await this.db.update(users).set({ lastLoginAt: this.now() }).where(eq(users.id, userId));
+      return { sessionToken: await this.createSession(userId, "active", meta), signedIn: true };
+    }
+    return { sessionToken: await this.createSession(userId, "pending_totp", meta), signedIn: false };
   }
 
   // ---------- sign-in ----------
@@ -256,8 +263,11 @@ export class AuthService {
     return user;
   }
 
-  /** Step 1: username or email + password. Returns a short-lived session that still needs the authenticator code. */
-  async login(identifier: string, password: string, meta: RequestMeta = {}): Promise<{ sessionToken: string; needsTotpSetup: boolean }> {
+  /**
+   * Username or email + password. With the authenticator on, returns a short-lived session that
+   * still needs the 6-digit code; with it off, a full session (`signedIn: true`).
+   */
+  async login(identifier: string, password: string, meta: RequestMeta = {}): Promise<{ sessionToken: string; needsTotpSetup: boolean; signedIn: boolean }> {
     const found = await this.findByLogin(identifier);
     // Lockout is per account (by email), whichever name was typed.
     const email = found?.email ?? normalizeEmail(identifier);
@@ -270,10 +280,22 @@ export class AuthService {
       await this.recordAttempt(email, false, meta);
       throw new AuthError("invalid_credentials", "That username or email and password don't match.");
     }
-    return { sessionToken: await this.createSession(user.id, "pending_totp", meta), needsTotpSetup: !user.totpEnabled };
+    if (!this.c.requireAuthenticator) {
+      await this.db.update(users).set({ lastLoginAt: this.now() }).where(eq(users.id, user.id));
+      await this.recordAttempt(email, true, meta);
+      await this.audit(user.id, "Signed in");
+      return { sessionToken: await this.createSession(user.id, "active", meta), needsTotpSetup: false, signedIn: true };
+    }
+    return { sessionToken: await this.createSession(user.id, "pending_totp", meta), needsTotpSetup: !user.totpEnabled, signedIn: false };
+  }
+
+  /** Whether sign-in asks for a 6-digit authenticator code. */
+  get requiresAuthenticator(): boolean {
+    return this.c.requireAuthenticator;
   }
 
   private async pending(token: string) {
+    if (!this.c.requireAuthenticator) throw new AuthError("session_expired", "Authenticator codes are turned off. Sign in with your password.");
     const [row] = await this.db
       .select({ session: sessions, user: users })
       .from(sessions)
@@ -464,7 +486,7 @@ export class AuthService {
       .from(invites)
       .where(and(isNull(invites.usedAt), gt(invites.expiresAt, this.now())));
     const openSet = new Set(open.map((o) => o.email));
-    return rows.map((u) => ({ ...safe(u), pendingInvite: !u.lastLoginAt && (openSet.has(u.email) || !hasAnySignIn(u) || !u.totpEnabled) }));
+    return rows.map((u) => ({ ...safe(u), pendingInvite: !u.lastLoginAt && (openSet.has(u.email) || !hasAnySignIn(u) || (this.c.requireAuthenticator && !u.totpEnabled)) }));
   }
 
   async listOpenInvites() {

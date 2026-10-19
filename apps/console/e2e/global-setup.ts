@@ -20,6 +20,8 @@ export const E2E_ENV = {
   GOOGLE_CLIENT_SECRET: "e2e-google-secret",
   // Keep password sign-in for the other tests.
   PASSWORD_LOGIN: "on",
+  // The full flow with the 6-digit code; the password-only path is covered by the auth unit tests.
+  AUTHENTICATOR_CODE: "on",
   // "Forgot password" emails land here instead of being sent.
   MAIL_OUTBOX_FILE: join(__dirname, ".outbox.jsonl"),
 };

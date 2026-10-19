@@ -2,6 +2,7 @@ import { AuthShell } from "@/components/auth/auth-shell";
 import { ResetPasswordForm } from "@/components/auth/forms";
 import { ButtonLink } from "@/components/ui/button";
 import { auth } from "@/lib/server/auth";
+import { serverEnv } from "@/lib/server/env";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function ResetPasswordPage({ params }: PageProps<"/reset-pa
     );
   }
   return (
-    <AuthShell title="Choose a new password" subtitle="You'll sign in with it and your authenticator code. You're signed out on every other device.">
+    <AuthShell title="Choose a new password" subtitle={`You'll sign in with it${serverEnv().authenticatorCode ? " and your authenticator code" : ""}. You're signed out on every other device.`}>
       <ResetPasswordForm token={token} email={reset.username ? `${reset.username} · ${reset.email}` : reset.email} />
     </AuthShell>
   );

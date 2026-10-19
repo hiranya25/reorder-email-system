@@ -19,7 +19,7 @@ let service: AuthService | undefined;
 export function auth(): AuthService {
   if (!service) {
     const env = serverEnv();
-    service = new AuthService(getDb(env.databaseUrl), { appSecret: env.appSecret, allowedDomain: env.allowedEmailDomain });
+    service = new AuthService(getDb(env.databaseUrl), { appSecret: env.appSecret, allowedDomain: env.allowedEmailDomain, requireAuthenticator: env.authenticatorCode });
   }
   return service;
 }

@@ -34,7 +34,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <SsoButtons providers={providers} />
       </div>
       {providers.length > 0 && env.passwordLogin && <OrDivider />}
-      {env.passwordLogin && <LoginForm />}
+      {env.passwordLogin && <LoginForm authenticator={env.authenticatorCode} />}
       {providers.length > 0 && (
         <p className="mt-4 text-center text-[12px] text-ink-muted">
           Only people an admin has added can sign in. Use whichever account

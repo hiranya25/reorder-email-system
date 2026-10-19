@@ -13,6 +13,8 @@ export interface ServerEnv {
   providers: Provider[];
   /** Email + password + authenticator code. Off once a provider is set, unless PASSWORD_LOGIN=on. */
   passwordLogin: boolean;
+  /** Ask for a 6-digit authenticator code after the password (AUTHENTICATOR_CODE=on). Off by default. */
+  authenticatorCode: boolean;
   /** Outgoing email for "forgot password", e.g. a cPanel mailbox. */
   smtp?: { host: string; port: number; user?: string; pass?: string; from: string };
   /** Tests only: write emails to this file instead of sending them. */
@@ -41,6 +43,8 @@ export function serverEnv(): ServerEnv {
   }
   const pw = e.PASSWORD_LOGIN?.trim().toLowerCase();
   if (pw && pw !== "on" && pw !== "off") throw new Error("PASSWORD_LOGIN must be on or off.");
+  const code = e.AUTHENTICATOR_CODE?.trim().toLowerCase();
+  if (code && code !== "on" && code !== "off") throw new Error("AUTHENTICATOR_CODE must be on or off.");
   cached = {
     databaseUrl: e.DATABASE_URL!,
     appSecret,
@@ -49,6 +53,7 @@ export function serverEnv(): ServerEnv {
     secureCookies: appUrl.startsWith("https://"),
     providers,
     passwordLogin: pw ? pw === "on" : providers.length === 0,
+    authenticatorCode: code === "on",
     smtp: e.SMTP_HOST
       ? {
           host: e.SMTP_HOST,

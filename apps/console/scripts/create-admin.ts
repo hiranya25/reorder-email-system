@@ -44,7 +44,8 @@ async function main() {
   const { DATABASE_URL, APP_SECRET, APP_URL, ALLOWED_EMAIL_DOMAIN } = process.env;
   if (!DATABASE_URL || !APP_SECRET || !APP_URL) throw new Error("Set DATABASE_URL, APP_SECRET and APP_URL first (see docs/DEPLOY_CPANEL.md).");
   const domain = ALLOWED_EMAIL_DOMAIN ?? "amipi.com";
-  const auth = new AuthService(getDb(DATABASE_URL), { appSecret: APP_SECRET, allowedDomain: domain });
+  const code = process.env.AUTHENTICATOR_CODE?.trim().toLowerCase() === "on";
+  const auth = new AuthService(getDb(DATABASE_URL), { appSecret: APP_SECRET, allowedDomain: domain, requireAuthenticator: code });
   if (!force && (await auth.hasActiveAdmin())) {
     throw new Error("An active admin already exists. Ask them to add you in Settings → Users, or rerun with --force.");
   }
@@ -57,7 +58,7 @@ async function main() {
     return;
   }
 
-  console.log("\nCreate the first admin. They'll set up an authenticator app at first sign-in.\n");
+  console.log(`\nCreate the first admin.${code ? " They'll set up an authenticator app at first sign-in." : ""}\n`);
   const name = await askUntil("Full name: ", (v) => (v ? undefined : "Enter a name."));
   const username = await askUntil("Username (optional, press Enter to skip): ", (v) => (v ? usernameProblem(v.toLowerCase()) : undefined));
   const email = await askUntil(`Email (@${domain}): `, (v) => (v.toLowerCase().endsWith(`@${domain}`) ? undefined : `Use an @${domain} address.`));

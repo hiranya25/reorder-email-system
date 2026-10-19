@@ -31,11 +31,13 @@ export interface UserRow {
 export interface SignInOptions {
   providers: string[];
   password: boolean;
+  /** Password sign-in also asks for a 6-digit code. */
+  authenticator: boolean;
   domain: string;
 }
 
 function describeOptions(o: SignInOptions): string {
-  const ways = [...o.providers.map((p) => `Sign in with ${p}`), ...(o.password ? ["username or email + password + an authenticator code"] : [])];
+  const ways = [...o.providers.map((p) => `Sign in with ${p}`), ...(o.password ? [`username or email + password${o.authenticator ? " + an authenticator code" : ""}`] : [])];
   const list = ways.length > 1 ? `${ways.slice(0, -1).join(", ")} or ${ways.at(-1)}` : (ways[0] ?? "not set up yet");
   return `Sign-in: ${list}. Only @${o.domain} addresses can be added.`;
 }

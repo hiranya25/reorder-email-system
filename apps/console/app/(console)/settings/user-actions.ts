@@ -3,6 +3,7 @@
 import type { Role } from "@reorder/db";
 import { revalidatePath } from "next/cache";
 import { auth, formError, requireUser } from "@/lib/server/auth";
+import { serverEnv } from "@/lib/server/env";
 
 export interface UserActionState {
   error?: string;
@@ -29,7 +30,8 @@ export async function createUserAction(_: UserActionState, form: FormData): Prom
   try {
     const u = await auth().createUser(admin.id, { name: field(form, "name"), username: field(form, "username"), email: field(form, "email"), role: r, password });
     revalidatePath("/settings");
-    return { done: `${u.name} added. Share their username and password in person or by Teams; they set up the authenticator at first sign-in.` };
+    const code = serverEnv().authenticatorCode ? "; they set up the authenticator at first sign-in" : "";
+    return { done: `${u.name} added. Share their username and password in person or by Teams${code}.` };
   } catch (e) {
     return { error: formError(e) };
   }

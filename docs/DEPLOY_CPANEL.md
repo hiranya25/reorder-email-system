@@ -49,8 +49,10 @@ MICROSOFT_CLIENT_SECRET=
 # Sign in with Google (step 4b). Leave out until you have them.
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-# Keep username/email + password + authenticator sign-in alongside Microsoft/Google.
+# Keep username/email + password sign-in alongside Microsoft/Google.
 PASSWORD_LOGIN=on
+# Recommended for the live site: also ask for a 6-digit code from an authenticator app.
+# AUTHENTICATOR_CODE=on
 # Email for "Forgot password" (step 4c).
 SMTP_HOST=mail.nobulldiamond.com
 SMTP_PORT=465
@@ -122,10 +124,10 @@ The script pulls `main`, installs, builds, copies static files, updates the data
 set -a; . ~/.reorder.env; set +a
 pnpm create-admin
 ```
-It asks for the admin's full name, username, email and password (typed hidden). Then sign in at `https://reorder.nobulldiamond.com/login` with the username (or email) and password, and scan the QR code with an authenticator app (Microsoft Authenticator or Google Authenticator).
+It asks for the admin's full name, username, email and password (typed hidden). Then sign in at `https://reorder.nobulldiamond.com/login` with the username (or email) and password. With `AUTHENTICATOR_CODE=on`, the first sign-in also shows a QR code to scan with an authenticator app (Microsoft Authenticator or Google Authenticator), and every sign-in after that asks for the 6-digit code.
 
 From **Settings → Users and roles** the admin then:
-- **Adds people** with their name, username, email, role and password. Share the username and password in person or by Teams; each person sets up their own authenticator at first sign-in. Leave the password empty for someone who will only use Microsoft or Google.
+- **Adds people** with their name, username, email, role and password. Share the username and password in person or by Teams (with `AUTHENTICATOR_CODE=on`, each person sets up their own authenticator at first sign-in). Leave the password empty for someone who will only use Microsoft or Google.
 - **Edits** anyone: name, username, email, role, a new password, a reset authenticator (lost phone) or an untied Microsoft/Google account.
 - **Disables** or **deletes** people. Deleting keeps their name in the activity log and their past approvals. Nobody can delete themselves or the last admin.
 

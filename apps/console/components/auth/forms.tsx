@@ -20,7 +20,7 @@ import { FormError } from "./auth-shell";
 
 const initial: FormState = {};
 
-export function LoginForm() {
+export function LoginForm({ authenticator }: { authenticator: boolean }) {
   const [state, action, pending] = useActionState(loginAction, initial);
   return (
     <form action={action} className="space-y-4">
@@ -37,8 +37,8 @@ export function LoginForm() {
       <p className="text-center text-[12px] text-ink-muted">
         <Link href="/login/forgot" className="font-semibold text-ink underline underline-offset-2">
           Forgot password?
-        </Link>{" "}
-        Lost your phone? Ask an admin to reset your authenticator.
+        </Link>
+        {authenticator && " Lost your phone? Ask an admin to reset your authenticator."}
       </p>
     </form>
   );

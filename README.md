@@ -26,7 +26,7 @@ pnpm lint && pnpm typecheck && pnpm build
 apps/console/scripts/prepare-standalone.sh && pnpm --filter @reorder/console e2e   # sign-in + full campaign flow in Chromium (after build)
 ```
 
-Everything lives in PostgreSQL: users and sign-in ("Sign in with Microsoft" or "Sign in with Google"; email + password + authenticator code when those aren't set up, e.g. locally), campaigns, imports, review decisions, the catalog, picks, approvals and the activity log. Every change is checked on the server for the user's role and the campaign's lock. The **Holiday 2026 Reorder (demo)** campaign runs a synthetic sample export through the same pipeline; download it from the Import screen to try an upload.
+Everything lives in PostgreSQL: users and sign-in ("Sign in with Microsoft" or "Sign in with Google"; username or email + password, optionally with a 6-digit authenticator code via AUTHENTICATOR_CODE=on), campaigns, imports, review decisions, the catalog, picks, approvals and the activity log. Every change is checked on the server for the user's role and the campaign's lock. The **Holiday 2026 Reorder (demo)** campaign runs a synthetic sample export through the same pipeline; download it from the Import screen to try an upload.
 
 ## Layout
 

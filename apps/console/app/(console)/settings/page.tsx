@@ -30,7 +30,7 @@ export default async function SettingsPage() {
               authenticatorOn: u.totpEnabled,
               linkedAccount: u.signInMethods.some((m) => m !== "password"),
             }))}
-            options={{ providers: env.providers.map((p) => p.label), password: env.passwordLogin, domain: env.allowedEmailDomain }}
+            options={{ providers: env.providers.map((p) => p.label), password: env.passwordLogin, authenticator: env.authenticatorCode, domain: env.allowedEmailDomain }}
           />
         }
       />
