@@ -25,13 +25,13 @@ function useFlash(): [boolean, () => void] {
   return [on, () => (setOn(true), setTimeout(() => setOn(false), 1800))];
 }
 
-export function SettingsView({ usersCard, audit }: { usersCard: React.ReactNode; audit: AuditEntry[] }) {
+export function SettingsView({ usersCard, mailchimpCard, audit }: { usersCard: React.ReactNode; mailchimpCard?: React.ReactNode; audit: AuditEntry[] }) {
   const hydrated = useStoreHydrated();
   // Forms read the stored values once loaded; remount them after hydration.
-  return hydrated ? <SettingsForms usersCard={usersCard} audit={audit} /> : <p className="text-sm text-ink-muted">Loading settings…</p>;
+  return hydrated ? <SettingsForms usersCard={usersCard} mailchimpCard={mailchimpCard} audit={audit} /> : <p className="text-sm text-ink-muted">Loading settings…</p>;
 }
 
-function SettingsForms({ usersCard, audit }: { usersCard: React.ReactNode; audit: AuditEntry[] }) {
+function SettingsForms({ usersCard, mailchimpCard, audit }: { usersCard: React.ReactNode; mailchimpCard?: React.ReactNode; audit: AuditEntry[] }) {
   const settings = useConsoleStore((s) => s.settings);
   const rules = useConsoleStore((s) => s.rules);
   const saveRules = useConsoleStore((s) => s.saveRules);
@@ -228,6 +228,7 @@ function SettingsForms({ usersCard, audit }: { usersCard: React.ReactNode; audit
       </div>
       </fieldset>
 
+      {mailchimpCard && <div className="mt-5">{mailchimpCard}</div>}
       <div className="mt-5">{usersCard}</div>
 
       <Card className="mt-5">

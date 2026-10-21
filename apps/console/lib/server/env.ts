@@ -19,6 +19,8 @@ export interface ServerEnv {
   smtp?: { host: string; port: number; user?: string; pass?: string; from: string };
   /** Tests only: write emails to this file instead of sending them. */
   mailOutboxFile?: string;
+  /** Sending through Mailchimp, once MAILCHIMP_API_KEY and MAILCHIMP_AUDIENCE_ID are set. */
+  mailchimp?: { apiKey: string; audienceId: string; fromName: string; replyTo: string; /** Tests only: a fake Mailchimp. */ baseUrl?: string };
 }
 
 let cached: ServerEnv | undefined;
@@ -64,6 +66,22 @@ export function serverEnv(): ServerEnv {
         }
       : undefined,
     mailOutboxFile: e.MAIL_OUTBOX_FILE || undefined,
+    mailchimp: mailchimpSettings(e),
   };
   return cached;
+}
+
+function mailchimpSettings(e: NodeJS.ProcessEnv): ServerEnv["mailchimp"] {
+  const apiKey = e.MAILCHIMP_API_KEY?.trim();
+  const audienceId = e.MAILCHIMP_AUDIENCE_ID?.trim();
+  if (!apiKey && !audienceId) return undefined;
+  if (!apiKey || !audienceId) throw new Error("Set both MAILCHIMP_API_KEY and MAILCHIMP_AUDIENCE_ID.");
+  if (!e.MAILCHIMP_API_BASE && !/-[a-z]+\d+$/.test(apiKey)) throw new Error("MAILCHIMP_API_KEY should end with its data centre, like …-us21.");
+  return {
+    apiKey,
+    audienceId,
+    fromName: e.MAILCHIMP_FROM_NAME?.trim() || "AMIPI INC",
+    replyTo: e.MAILCHIMP_REPLY_TO?.trim() || "salesgroup@amipi.com",
+    baseUrl: e.MAILCHIMP_API_BASE?.trim() || undefined,
+  };
 }

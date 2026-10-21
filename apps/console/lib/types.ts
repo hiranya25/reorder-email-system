@@ -31,6 +31,39 @@ export interface ApprovalInfo {
   exportedAt?: string;
 }
 
+/** Outcome for one address in Mailchimp. */
+export type MailchimpContactResult = "synced" | "new" | "unsubscribed" | "bounced" | "not_subscribed" | "failed";
+
+/** One round of sending (usually only one; see mailchimp_runs). */
+export interface MailchimpWave {
+  wave: number;
+  tag: string;
+  /** Addresses planned for this round. */
+  planned: number;
+  status: "idle" | "syncing" | "synced" | "test_sent" | "sending" | "sent" | "failed";
+  step?: string;
+  error?: string;
+  counts: Partial<Record<MailchimpContactResult, number>>;
+  /** Addresses checked so far. */
+  checked: number;
+  /** Contacts in the round's segment, who get the email. */
+  recipients?: number;
+  testSentAt?: string;
+  sentAt?: string;
+  sentBy?: string;
+  mcCampaignId?: string;
+  /** Addresses that won't get it as things stand (new, unsubscribed, bounced, failed). */
+  attention: { email: string; company: string; accountId: string; result: MailchimpContactResult; error?: string }[];
+}
+
+export interface MailchimpOverview {
+  /** MAILCHIMP_API_KEY and MAILCHIMP_AUDIENCE_ID are set. */
+  configured: boolean;
+  /** The demo campaign can't be sent. */
+  demo: boolean;
+  waves: MailchimpWave[];
+}
+
 export interface AuditEntry {
   id: string;
   at: string;

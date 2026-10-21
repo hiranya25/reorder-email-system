@@ -59,6 +59,12 @@ SMTP_PORT=465
 SMTP_USER=no-reply@nobulldiamond.com
 SMTP_PASSWORD=
 MAIL_FROM=AMIPI Reorder Console <no-reply@nobulldiamond.com>
+# Sending through Mailchimp (step 4d).
+MAILCHIMP_API_KEY=
+MAILCHIMP_AUDIENCE_ID=
+# Optional, these are the defaults:
+# MAILCHIMP_FROM_NAME=AMIPI INC
+# MAILCHIMP_REPLY_TO=salesgroup@amipi.com
 ENV
 chmod 600 ~/.reorder.env
 openssl rand -base64 48   # copy this into APP_SECRET above
@@ -92,6 +98,20 @@ Either way, only people an admin added in **Settings → Users and roles** (or w
 
 Without these, "Forgot password" says it isn't set up, and an admin sets a new password from **Settings → Users → Edit** instead.
 
+## 4d. Mailchimp
+Done once, with whoever manages the Mailchimp account.
+1. **API key:** Mailchimp → your profile picture → **Profile → Extras → API keys → Create A Key**, named `Reorder Console`. Copy it straight into `MAILCHIMP_API_KEY` in `~/.reorder.env` (and the app's environment variables in step 5). It ends with the data centre, like `-us21`. Never paste it into chat, email or Teams.
+2. **Audience ID:** **Audience → All contacts → Settings → Audience name and defaults → Audience ID** (looks like `a1b2c3d4e5`) → `MAILCHIMP_AUDIENCE_ID`.
+3. **Room for fields:** the reorder email uses 10 audience fields (all starting with `RC`, e.g. `RCGREET`, `RCITEM1`), plus up to 9 more once product photos and new-season picks are used. Mailchimp limits how many fields an audience can have, so if it's nearly full, delete old fields you no longer use (**Audience → Settings → Audience fields and \*|MERGE|\* tags**). The console says exactly how many it needs if there isn't room.
+4. Restart the app, then **Settings → Mailchimp → Test connection**. It should show your audience name and number of subscribed contacts.
+
+How sending works, on each campaign's **Approve** page once it has its approvals (admins only):
+1. **Update the contacts:** writes each customer's products into their Mailchimp contact and tags them (e.g. `reorder-HOLIDAY-2025`). Only subscribed contacts are written; unsubscribed or bounced addresses are never touched. Addresses that aren't in the audience yet are listed, and an admin can tick and add them as subscribed.
+2. **Send a test** to the team test list in Settings.
+3. **Send now** (type SEND): Mailchimp emails everyone with the tag. After this the campaign can't be reopened.
+
+An address shared by two customers can hold only one customer's products at a time, so the second customer's email goes out in a second round after the first is sent; the Approve page shows the rounds. The CSV export is still there as a backup ("Or do it by hand").
+
 ## 5. Create the Node.js app
 cPanel → **Setup Node.js App** → **Create Application**:
 
@@ -103,7 +123,7 @@ cPanel → **Setup Node.js App** → **Create Application**:
 | Application URL | `reorder.nobulldiamond.com` |
 | Application startup file | `app.js` |
 
-Under **Environment variables**, add the same values as in `~/.reorder.env` (`DATABASE_URL`, `APP_SECRET`, `APP_URL`, `ALLOWED_EMAIL_DOMAIN`, `PASSWORD_LOGIN`, the `SMTP_…` / `MAIL_FROM` ones, and the `MICROSOFT_…` / `GOOGLE_…` ones you have). Click **Create**.
+Under **Environment variables**, add the same values as in `~/.reorder.env` (`DATABASE_URL`, `APP_SECRET`, `APP_URL`, `ALLOWED_EMAIL_DOMAIN`, `PASSWORD_LOGIN`, the `SMTP_…` / `MAIL_FROM` ones, `MAILCHIMP_API_KEY` / `MAILCHIMP_AUDIENCE_ID`, and the `MICROSOFT_…` / `GOOGLE_…` ones you have). Click **Create**.
 
 > Don't use the page's "Run NPM Install" button. The project uses pnpm and the deploy script installs everything.
 
@@ -148,6 +168,9 @@ cd ~/reorder-email-system && ./scripts/deploy.sh
 - **Google says "redirect_uri_mismatch":** same for step 4b (`/auth/google/callback`).
 - **"You don't have access yet":** the person hasn't been added, or was added with a different email. Add them in Settings.
 - **"Password reset by email isn't set up yet":** the `SMTP_…` settings from step 4c are missing. Add them and restart the app.
+- **"Mailchimp refused the API key":** `MAILCHIMP_API_KEY` is wrong or was revoked. Create a new key (step 4d) and restart.
+- **"Mailchimp has no audience with that ID":** check `MAILCHIMP_AUDIENCE_ID` (step 4d, point 2).
+- **"Your audience may be out of field slots":** delete unused audience fields in Mailchimp (step 4d, point 3) and click Update again.
 - **Reset emails don't arrive:** check the spam folder, then cPanel → **Email Deliverability** and **Track Delivery** for `no-reply@`.
 - **"…is linked to a different Microsoft/Google account":** they used another account before. An admin opens **Edit** on that person and ticks **Untie their Microsoft/Google account**.
 - **Can't sign in after changing APP_SECRET:** put the old value back, or reset each user from Settings.

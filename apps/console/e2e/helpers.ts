@@ -91,3 +91,6 @@ export async function go(page: Page, url: string) {
 export async function settled(page: Page) {
   await page.waitForFunction(() => !document.querySelector('div[hidden][id^="S:"]'));
 }
+
+/** The fake Mailchimp the e2e servers talk to (e2e/fake-mailchimp.ts). */
+export const FAKE_MAILCHIMP = "http://127.0.0.1:3290";

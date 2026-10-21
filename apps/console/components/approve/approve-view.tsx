@@ -16,6 +16,7 @@ import { Card, CardHeader } from "../ui/card";
 import { Input } from "../ui/field";
 import { Modal } from "../ui/modal";
 import { AuditTable } from "./audit-table";
+import { MailchimpCard, useMailchimpOverview } from "./mailchimp-card";
 
 const CONFIRM_WORD = "APPROVE";
 
@@ -36,6 +37,9 @@ export function ApproveView() {
   const approve = useConsoleStore((s) => s.approve);
   const reopen = useConsoleStore((s) => s.reopen);
   const markExported = useConsoleStore((s) => s.markExported);
+  const refreshCampaign = useConsoleStore((s) => s.refreshCampaign);
+  const mailchimp = useMailchimpOverview(campaign.id);
+  const sentThroughMailchimp = mailchimp.overview?.waves.some((w) => w.status === "sent") ?? false;
   const campaignAudit = useConsoleStore((s) => s.campaignAudit[campaign.id]) ?? [];
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [typed, setTyped] = useState("");
@@ -67,7 +71,7 @@ export function ApproveView() {
         actions={
           canReview && (
             <>
-              {locked && (
+              {locked && !sentThroughMailchimp && (
                 <Button variant="secondary" size="lg" onClick={() => setReopenOpen(true)}>
                   Reopen for changes
                 </Button>
@@ -143,12 +147,21 @@ export function ApproveView() {
         </Card>
       </div>
 
+      <MailchimpCard
+        campaignId={campaign.id}
+        fullyApproved={fullyApproved}
+        isAdmin={me.role === "admin"}
+        state={mailchimp}
+        onSent={() => void refreshCampaign(campaign.id)}
+      />
+
       <Card className="mt-5">
-        <CardHeader
-          title="Sync to Mailchimp"
-          subtitle="Direct sync arrives with the backend. Until then, import the contacts into Mailchimp and send to the tag."
-          aside={approval?.exportedAt ? <span className="font-semibold text-ok-fg">Exported</span> : undefined}
-        />
+        <details>
+          <summary className="cursor-pointer text-[15px] font-semibold">
+            Or do it by hand: CSV import into Mailchimp
+            {approval?.exportedAt && <span className="ml-2 text-[13px] font-semibold text-ok-fg">Exported</span>}
+          </summary>
+          <p className="mt-1 mb-4 text-[13px] text-ink-muted">A backup if the direct connection isn&apos;t available. Import the contacts, then send a campaign to the tag from Mailchimp.</p>
         <ol className="space-y-4 text-[14px]">
           <li className="flex flex-wrap items-center gap-3">
             <span className="flex size-6 items-center justify-center rounded-full bg-navy text-[12px] font-bold text-white">1</span>
@@ -176,6 +189,7 @@ export function ApproveView() {
             <span className="min-w-[240px] flex-1">In Mailchimp, send a regular campaign using the template to the segment tagged {tag || "with the campaign tag"}.</span>
           </li>
         </ol>
+        </details>
       </Card>
 
       <Card className="mt-5">

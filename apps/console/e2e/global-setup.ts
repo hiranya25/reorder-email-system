@@ -22,6 +22,10 @@ export const E2E_ENV = {
   PASSWORD_LOGIN: "on",
   // The full flow with the 6-digit code; the password-only path is covered by the auth unit tests.
   AUTHENTICATOR_CODE: "on",
+  // A fake Mailchimp (e2e/fake-mailchimp.ts), never the real one.
+  MAILCHIMP_API_KEY: "e2e-only-key-us1",
+  MAILCHIMP_AUDIENCE_ID: "list123",
+  MAILCHIMP_API_BASE: "http://127.0.0.1:3290/3.0",
   // "Forgot password" emails land here instead of being sent.
   MAIL_OUTBOX_FILE: join(__dirname, ".outbox.jsonl"),
 };

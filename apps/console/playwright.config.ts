@@ -29,6 +29,12 @@ export default defineConfig({
   // Runs the same standalone server cPanel runs. Expects `pnpm build` + prepare-standalone first.
   webServer: [
     {
+      command: "pnpm exec tsx e2e/fake-mailchimp.ts",
+      url: "http://127.0.0.1:3290/__state",
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
       command: "node .next/standalone/apps/console/server.js",
       url: `http://localhost:${PORT}/login`,
       reuseExistingServer: !process.env.CI,

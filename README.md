@@ -36,6 +36,7 @@ apps/console     Next.js app: the Reorder Console UI
 packages/core    Business rules with no I/O: import pipeline, email checks, mapping decisions, summary, issues, steps
 packages/db      PostgreSQL schema and migrations (Drizzle)
 packages/auth    Sign-in: Microsoft/Google (OpenID Connect), passwords, authenticator codes, sessions, invites, roles
+packages/mailchimp  Mailchimp API client, contact sync and an in-memory fake for tests
 packages/email   Customer email: model, hand-coded HTML (preview and Mailchimp merge-tag template), merge fields, checks
 ```
 

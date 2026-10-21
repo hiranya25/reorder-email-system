@@ -1,5 +1,6 @@
 import { ConsoleShell } from "@/components/console/shell";
 import { SettingsView } from "@/components/settings/settings-view";
+import { MailchimpSettingsCard } from "@/components/settings/mailchimp-settings-card";
 import { UsersCard } from "@/components/settings/users-card";
 import { auth, requireUser } from "@/lib/server/auth";
 import { serverEnv } from "@/lib/server/env";
@@ -15,6 +16,7 @@ export default async function SettingsPage() {
     <ConsoleShell>
       <SettingsView
         audit={audit}
+        mailchimpCard={<MailchimpSettingsCard configured={!!env.mailchimp} fromName={env.mailchimp?.fromName} replyTo={env.mailchimp?.replyTo} />}
         usersCard={
           <UsersCard
             users={users.map((u) => ({

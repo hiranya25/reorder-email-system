@@ -30,9 +30,9 @@ describe("send list", () => {
   it("exports one CSV row per address with merge fields and the campaign tag", () => {
     const lines = mailchimpImportCsv(list).trim().split("\r\n");
     expect(lines).toHaveLength(3);
-    expect(lines[0]!.startsWith("Email Address,GREETING,COMPANY,CUST_ID,SEASON")).toBe(true);
+    expect(lines[0]!.startsWith("Email Address,RCGREET,RCREP,RCREORDER,RCMORE")).toBe(true);
     expect(lines[0]!.endsWith(",Tags")).toBe(true);
-    expect(lines[1]!.startsWith("a@x.com,Store 1 team,Store 1,1,HOLIDAY-2025")).toBe(true);
+    expect(lines[1]!.startsWith("a@x.com,Store 1 team,")).toBe(true);
     expect(lines[2]!.startsWith("b@x.com,")).toBe(true);
     expect(lines[1]!.endsWith(",reorder-HOLIDAY-2025")).toBe(true);
   });

@@ -241,3 +241,51 @@ export const appSettings = pgTable("app_settings", {
   updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
   updatedAt: at("updated_at").notNull().defaultNow(),
 });
+
+// ---------- Mailchimp sending (B3) ----------
+
+/**
+ * One round of sending a campaign through Mailchimp. Usually one per campaign; an address shared
+ * by two customers gets the second customer's email in round 2, after round 1 is sent.
+ */
+export const mailchimpRuns = pgTable(
+  "mailchimp_runs",
+  {
+    campaignId: campaignRef(),
+    wave: integer("wave").notNull(),
+    /** idle → syncing → synced → test_sent → sent; "failed" when a step stopped with an error. */
+    status: text("status", { enum: ["idle", "syncing", "synced", "test_sent", "sending", "sent", "failed"] }).notNull().default("idle"),
+    /** What the running step is doing, e.g. "Updating contacts". */
+    step: text("step"),
+    error: text("error"),
+    segmentId: integer("segment_id"),
+    mcCampaignId: text("mc_campaign_id"),
+    /** Audience fields the email used when last synced. */
+    fieldTags: jsonb("field_tags").$type<string[]>().notNull().default([]),
+    recipients: integer("recipients"),
+    testSentAt: at("test_sent_at"),
+    sentAt: at("sent_at"),
+    sentBy: text("sent_by"),
+    updatedAt: at("updated_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.campaignId, t.wave] })],
+);
+
+/** The outcome for each address in a round. */
+export const mailchimpContacts = pgTable(
+  "mailchimp_contacts",
+  {
+    campaignId: campaignRef(),
+    wave: integer("wave").notNull(),
+    email: text("email").notNull(),
+    accountId: text("account_id").notNull(),
+    company: text("company").notNull(),
+    /** synced | new | unsubscribed | bounced | not_subscribed | failed */
+    result: text("result").notNull(),
+    error: text("error"),
+    /** Hash of the fields last written, so unchanged contacts aren't written again. */
+    fieldsHash: text("fields_hash"),
+    updatedAt: at("updated_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.campaignId, t.wave, t.email] })],
+);

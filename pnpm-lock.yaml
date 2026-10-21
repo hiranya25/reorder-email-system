@@ -22,6 +22,9 @@ importers:
       '@reorder/email':
         specifier: workspace:*
         version: link:../../packages/email
+      '@reorder/mailchimp':
+        specifier: workspace:*
+        version: link:../../packages/mailchimp
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -167,6 +170,25 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^5.0.3
+        version: 5.0.3(@types/node@22.20.5)(vite@8.3.2(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+
+  packages/mailchimp:
+    dependencies:
+      '@reorder/email':
+        specifier: workspace:*
+        version: link:../email
+    devDependencies:
+      '@reorder/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

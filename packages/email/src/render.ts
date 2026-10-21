@@ -1,3 +1,4 @@
+import { escapeHtml, itemDetailHtml, itemNameHtml, MERGE_FIELD_DEFS, pickHtml, safeUrl, type MergeFieldGroup } from "./merge";
 import type { EmailModel } from "./model";
 
 /** AMIPI house style, taken from the template the sales team already sends. */
@@ -18,15 +19,6 @@ const SCRIPT = "'Playfair Display', Georgia, 'Times New Roman', serif";
 
 const TAGLINE = "Your favorite diamond guys!";
 
-export function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
-
-/** Only http(s) and mailto links make it into the email. */
-function safeUrl(url: string | undefined): string | undefined {
-  if (!url) return undefined;
-  return /^(https?:|mailto:)/i.test(url.trim()) ? url.trim() : undefined;
-}
 
 /**
  * How values reach the HTML. Preview fills real values; the Mailchimp template
@@ -37,27 +29,46 @@ interface Slots {
   url: (value: string | undefined, tag: string) => string | undefined;
   /** Image sources; the preview also accepts inline data:image URIs (demo catalog). */
   img: (value: string | undefined, tag: string) => string | undefined;
+  /** A ready-made HTML value: the preview's own HTML, or *|HTML:TAG|* for Mailchimp. */
+  html: (previewHtml: string, tag: string) => string;
   /** Renders `html` only when the slot has content. */
   when: (present: boolean, tag: string, html: string) => string;
   /** Preview-only placeholder (e.g. "Product image from catalog"); never in the template. */
   preview: boolean;
+  /** Mailchimp only: whether this tag's field exists in the audience. */
+  has: (tag: string) => boolean;
 }
 
 const previewSlots: Slots = {
   text: (v) => escapeHtml(v ?? ""),
   url: (v) => safeUrl(v),
   img: (v) => (v && /^data:image\/(png|jpe?g|gif|webp|svg\+xml)[;,]/i.test(v) ? escapeHtml(v) : safeUrl(v)),
+  html: (h) => h,
   when: (present, _tag, html) => (present ? html : ""),
   preview: true,
+  has: () => true,
 };
 
-const mergeSlots: Slots = {
-  text: (_v, tag) => `*|${tag}|*`,
-  url: (_v, tag) => `*|${tag}|*`,
-  img: (_v, tag) => `*|${tag}|*`,
-  when: (_present, tag, html) => `*|IF:${tag}|*${html}*|END:IF|*`,
-  preview: false,
-};
+const GROUP_OF = new Map(MERGE_FIELD_DEFS.map((d) => [d.tag, d.group]));
+
+/**
+ * Merge tags for Mailchimp. Tags whose field group isn't in the audience render as empty, since
+ * Mailchimp would print an unknown *|TAG|* as-is.
+ */
+function mergeSlots(groups: ReadonlySet<MergeFieldGroup>): Slots {
+  const has = (tag: string) => groups.has(GROUP_OF.get(tag) ?? "core");
+  return {
+    text: (_v, tag) => (has(tag) ? `*|${tag}|*` : ""),
+    url: (_v, tag) => (has(tag) ? `*|${tag}|*` : undefined),
+    img: (_v, tag) => (has(tag) ? `*|${tag}|*` : undefined),
+    html: (_h, tag) => (has(tag) ? `*|HTML:${tag}|*` : ""),
+    when: (_present, tag, html) => (has(tag) ? `*|IF:${tag}|*${html}*|END:IF|*` : ""),
+    preview: false,
+    has,
+  };
+}
+
+const ALL_GROUPS: ReadonlySet<MergeFieldGroup> = new Set(MERGE_FIELD_DEFS.map((d) => d.group));
 
 /** The logo image when there's a public link, otherwise an AMIPI-style text wordmark. */
 function logo(m: EmailModel, size: "large" | "small"): string {
@@ -74,59 +85,55 @@ function logo(m: EmailModel, size: "large" | "small"): string {
 function itemBlock(m: EmailModel, i: number, s: Slots): string {
   const n = i + 1;
   const item = m.items[i];
-  const name = s.text(item?.name, `ITEM${n}_NAME`);
-  const href = s.url(item?.url, `ITEM${n}_URL`);
-  const img = s.img(item?.imageUrl, `ITEM${n}_IMG`);
+  const img = s.img(item?.imageUrl, `RCITEM${n}I`);
+  const alt = s.preview && item ? escapeHtml(item.name) : "Product photo";
   const image = s.when(
     !!img,
-    `ITEM${n}_IMG`,
-    `<div style="padding-bottom:10px;"><img src="${img ?? ""}" width="160" alt="${name}" style="display:inline-block;width:160px;max-width:100%;height:auto;border:0;" /></div>`,
+    `RCITEM${n}I`,
+    `<div style="padding-bottom:10px;"><img src="${img ?? ""}" width="160" alt="${alt}" style="display:inline-block;width:160px;max-width:100%;height:auto;border:0;" /></div>`,
   );
-  const title = href ? `<a href="${href}" style="color:${C.navy};text-decoration:none;">${name}</a>` : name;
   const body = `<tr><td align="center" style="padding:10px 0;">
 ${image}
-<div style="font:19px/1.35 ${FONT};color:${C.navy};">${title}</div>
-${s.when(!!item?.meta, `ITEM${n}_META`, `<div style="padding-top:4px;font:italic 15px/1.4 ${FONT};color:${C.text};">${s.text(item?.meta, `ITEM${n}_META`)}</div>`)}
-<div style="padding-top:4px;font:12px/1.4 ${FONT};color:${C.muted};">${s.text(item?.sku, `ITEM${n}_SKU`)} &middot; You ordered ${s.text(item ? String(item.qty) : undefined, `ITEM${n}_QTY`)}</div>
+<div style="font:19px/1.35 ${FONT};color:${C.navy};">${s.html(item ? itemNameHtml(item) : "", `RCITEM${n}`)}</div>
+<div style="padding-top:4px;font:15px/1.4 ${FONT};color:${C.text};">${s.html(item ? itemDetailHtml(item) : "", `RCITEM${n}D`)}</div>
 </td></tr>`;
-  return n === 1 ? body : s.when(!!item, `ITEM${n}_NAME`, body);
+  return n === 1 ? body : s.when(!!item, `RCITEM${n}`, body);
 }
 
 function pickCard(m: EmailModel, i: number, s: Slots): string {
   const n = i + 1;
   const pick = m.picks[i];
   const chosen = !!pick?.name;
-  const name = chosen || !s.preview ? s.text(pick?.name, `REC${n}_NAME`) : "[New style name]";
-  const href = s.url(pick?.url, `REC${n}_URL`) ?? "#";
-  const img = s.img(pick?.imageUrl, `REC${n}_IMG`);
+  const name = s.preview ? (chosen ? pickHtml(pick!) : "[New style name]") : s.html("", `RCREC${n}`);
+  const img = s.img(pick?.imageUrl, `RCREC${n}I`);
   const placeholder = !s.preview ? "" : chosen ? "Image missing<br/>in catalog" : `New-season pick ${n}<br/>(not chosen yet)`;
+  const alt = s.preview && chosen ? escapeHtml(pick!.name!) : "New style";
   const image = img
-    ? `<img src="${img}" width="150" alt="${name}" style="display:block;width:100%;max-width:150px;height:auto;border:0;margin:0 auto;" />`
+    ? s.when(true, `RCREC${n}I`, `<img src="${img}" width="150" alt="${alt}" style="display:block;width:100%;max-width:150px;height:auto;border:0;margin:0 auto;" />`)
     : placeholder
       ? `<div style="height:120px;background:${C.card};color:${C.muted};font:12px/1.4 ${FONT};text-align:center;display:table;width:100%;"><span style="display:table-cell;vertical-align:middle;padding:0 10px;">${placeholder}</span></div>`
       : "";
   const card = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" style="padding:0 0 14px;">
 ${image}
-<div style="padding-top:8px;font:15px/1.3 ${FONT};color:${C.navy};">${name}</div>
-<div style="padding-top:4px;font:bold 13px/1.3 ${FONT};"><a href="${href}" style="color:${C.red};text-decoration:none;">View style &rarr;</a></div>
+<div style="padding-top:8px;font:bold 15px/1.3 ${FONT};color:${C.navy};">${name}</div>
 </td></tr></table>`;
   const cell = `<td class="stack" valign="top" width="33%" style="width:33%;padding:0 6px;">${card}</td>`;
-  return s.preview ? cell : `*|IF:REC${n}_NAME|*${cell}*|END:IF|*`;
+  return s.preview ? cell : s.when(true, `RCREC${n}`, cell);
 }
 
 function render(m: EmailModel, s: Slots): string {
-  const reorderHref = s.url(m.reorderUrl, "REORDERURL") ?? "#";
+  const reorderHref = s.url(m.reorderUrl, "RCREORDER") ?? "#";
   const phone = m.brand.phone?.trim();
   const telHref = phone ? `tel:${phone.replace(/[^\d+]/g, "")}` : "";
   const more = s.when(
     m.moreCount > 0,
-    "MORECOUNT",
-    `<tr><td align="center" style="padding:8px 0 0;font:13px/1.5 ${FONT};color:${C.text};">+ ${s.text(String(m.moreCount), "MORECOUNT")} more products from last season</td></tr>`,
+    "RCMORE",
+    `<tr><td align="center" style="padding:8px 0 0;font:13px/1.5 ${FONT};color:${C.text};">+ ${s.text(String(m.moreCount), "RCMORE")} more products from last season</td></tr>`,
   );
   const picks = `<tr><td align="center" style="padding:30px 0 14px;font:bold 13px/1 ${FONT};letter-spacing:2px;text-transform:uppercase;color:${C.navy};">New this season, picked for you</td></tr>
 <tr><td style="padding-bottom:16px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${[0, 1, 2].map((i) => pickCard(m, i, s)).join("")}</tr></table></td></tr>`;
-  const pickSection = s.preview ? picks : `*|IF:REC1_NAME|*${picks}*|END:IF|*`;
-  const signer = s.preview ? escapeHtml(m.repName ?? `${m.brand.brandName} Sales Team`) : `*|IF:REPNAME|**|REPNAME|**|ELSE:|*${escapeHtml(m.brand.brandName)} Sales Team*|END:IF|*`;
+  const pickSection = s.preview ? picks : s.when(true, "RCREC1", picks);
+  const signer = s.preview ? escapeHtml(m.repName ?? `${m.brand.brandName} Sales Team`) : `*|IF:RCREP|**|RCREP|**|ELSE:|*${escapeHtml(m.brand.brandName)} Sales Team*|END:IF|*`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -135,7 +142,7 @@ function render(m: EmailModel, s: Slots): string {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="light only" />
 <meta name="supported-color-schemes" content="light" />
-<title>${s.text(m.subject, "MC:SUBJECT")}</title>
+<title>${s.preview ? escapeHtml(m.subject) : "*|MC:SUBJECT|*"}</title>
 <style>
   body { margin:0; padding:0; background:${C.page}; }
   a { color:${C.navy}; }
@@ -148,7 +155,7 @@ function render(m: EmailModel, s: Slots): string {
 </style>
 </head>
 <body style="margin:0;padding:0;background:${C.page};">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${s.text(m.preheader, "PREHEADER")}</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(s.preview ? m.preheader : campaignPreheader(m))}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.page};">
 <tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background:#ffffff;">
@@ -160,8 +167,8 @@ function render(m: EmailModel, s: Slots): string {
 </td></tr>
 <tr><td class="pad" style="padding:34px 66px 8px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-<tr><td style="font:16px/1.4 ${FONT};color:${C.ink};">Hi ${s.text(m.greetingName, "GREETING")},</td></tr>
-<tr><td style="padding:18px 0 14px;font:15px/1.55 ${FONT};color:${C.ink};">${s.text(m.intro, "INTRO")}</td></tr>
+<tr><td style="font:16px/1.4 ${FONT};color:${C.ink};">Hi ${s.text(m.greetingName, "RCGREET")},</td></tr>
+<tr><td style="padding:18px 0 14px;font:15px/1.55 ${FONT};color:${C.ink};">${escapeHtml(m.intro)}</td></tr>
 ${[0, 1, 2].map((i) => itemBlock(m, i, s)).join("\n")}
 ${more}
 <tr><td align="center" style="padding:26px 0 14px;font:18px/1.4 ${FONT};color:${C.navy};">Would you like us to place a reorder for you?</td></tr>
@@ -193,7 +200,16 @@ export function renderPreviewHtml(m: EmailModel): string {
   return render(m, previewSlots);
 }
 
-/** Saved Mailchimp template: same layout, with merge tags for every personal value. */
-export function renderMailchimpTemplate(m: EmailModel): string {
-  return render(m, mergeSlots);
+/**
+ * Mailchimp campaign HTML: same layout, with merge tags for every personal value. The intro and
+ * season wording are the same for everyone, so they're written in. `groups` limits the optional
+ * fields to those that exist in the audience (default: all).
+ */
+export function renderMailchimpTemplate(m: EmailModel, groups: ReadonlySet<MergeFieldGroup> = ALL_GROUPS): string {
+  return render(m, mergeSlots(groups));
+}
+
+/** Inbox preview line for the whole campaign (the per-customer one counts their products). */
+export function campaignPreheader(m: Pick<EmailModel, "seasonWord">): string {
+  return `Your bestsellers from last ${m.seasonWord} season, ready to reorder in one click.`;
 }

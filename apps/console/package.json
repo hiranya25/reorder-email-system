@@ -16,6 +16,7 @@
     "@reorder/core": "workspace:*",
     "@reorder/db": "workspace:*",
     "@reorder/email": "workspace:*",
+    "@reorder/mailchimp": "workspace:*",
     "@tanstack/react-table": "^8.21.3",
     "clsx": "^2.1.1",
     "drizzle-orm": "~0.45.4",

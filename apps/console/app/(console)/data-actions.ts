@@ -5,6 +5,7 @@ import type { Role } from "@reorder/db";
 import { randomBytes } from "node:crypto";
 import { deriveCampaign, readinessFor, sendListFor } from "@/lib/derive";
 import { requireUser } from "@/lib/server/auth";
+import { anyRoundSent } from "@/lib/server/mailchimp";
 import * as repo from "@/lib/server/repo";
 import type { ActionResult, CampaignSnapshot, Settings } from "@/lib/types";
 
@@ -155,7 +156,12 @@ export async function approveAction(campaignId: string) {
 }
 
 export async function reopenAction(campaignId: string) {
-  return run(EDITORS, (user) => repo.reopen(isId(campaignId) ? campaignId : bad("Unknown campaign."), user.id));
+  return run(EDITORS, async (user) => {
+    if (!isId(campaignId)) bad("Unknown campaign.");
+    // Reopening and sending again would email the same customers twice.
+    if (await anyRoundSent(campaignId)) bad("This campaign was already sent through Mailchimp, so it can't be reopened. Create a new campaign for changes.");
+    await repo.reopen(campaignId, user.id);
+  });
 }
 
 export async function markExportedAction(campaignId: string, detail: string) {
